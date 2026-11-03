@@ -28,14 +28,13 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   // Throttle per account as well as per client: the client key comes from
   // headers, which only `tailscale serve` can set reliably.
   if (email.length > 320) return { error: "Wrong email or password" };
-  // Both limits are checked before any password is tested (fail closed), and
-  // every attempted email is tracked alike so responses don't reveal which
-  // accounts exist. Tradeoff: repeated wrong guesses delay the owner too, but
-  // the delay is capped at 15 min and only tailnet devices can reach this page.
-  const keys = [
-    `email:${email}`,
-    `client:${(h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local").slice(0, 200)}`,
-  ];
+  // Limits are checked before any password is tested (fail closed), and every
+  // attempted email is tracked alike so responses don't reveal which accounts
+  // exist. The account limit is keyed on email + client, so guessing from one
+  // device never locks the owner out on another. The client identity comes
+  // from `tailscale serve`, which strips client-supplied Tailscale-User-* headers.
+  const client = (h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local").slice(0, 200);
+  const keys = [`email:${email}|${client}`, `client:${client}`];
   const wait = Math.max(...keys.map(loginBlockedFor));
   if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
 
