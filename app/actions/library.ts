@@ -27,27 +27,24 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   const email = str(form, "email").toLowerCase();
   // Throttle per account as well as per client: the client key comes from
   // headers, which only `tailscale serve` can set reliably.
-  const clientKey = `client:${(h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local").slice(0, 200)}`;
-  const tooMany = (s: number) => ({ error: `Too many attempts. Try again in ${s}s.` });
-  if (loginBlockedFor(clientKey)) return tooMany(loginBlockedFor(clientKey));
+  if (email.length > 320) return { error: "Wrong email or password" };
+  // Both limits are checked before any password is tested (fail closed), and
+  // every attempted email is tracked alike so responses don't reveal which
+  // accounts exist. Tradeoff: repeated wrong guesses delay the owner too, but
+  // the delay is capped at 15 min and only tailnet devices can reach this page.
+  const keys = [
+    `email:${email}`,
+    `client:${(h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local").slice(0, 200)}`,
+  ];
+  const wait = Math.max(...keys.map(loginBlockedFor));
+  if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
 
-  const [user] = email.length <= 320
-    ? await db.select().from(schema.users).where(eq(schema.users.email, email))
-    : [];
-  const ok = !!user && (await verifyPassword(str(form, "password"), user.passwordHash));
-  // Reason: the per-account limit is checked after the password, so someone
-  // guessing can't lock the real owner out; only existing accounts are tracked.
-  const emailKey = user ? `email:${user.userId}` : null;
-  if (!ok) {
-    recordLoginFailure(clientKey);
-    if (emailKey) {
-      recordLoginFailure(emailKey);
-      if (loginBlockedFor(emailKey)) return tooMany(loginBlockedFor(emailKey));
-    }
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email));
+  if (!user || !(await verifyPassword(str(form, "password"), user.passwordHash))) {
+    keys.forEach(recordLoginFailure);
     return { error: "Wrong email or password" };
   }
-  clearLoginFailures(clientKey);
-  if (emailKey) clearLoginFailures(emailKey);
+  keys.forEach(clearLoginFailures);
   await createSession(user.userId);
   redirect(safeNext(str(form, "next")));
 }
