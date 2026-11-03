@@ -8,7 +8,7 @@ import { EmojiButton } from "./EmojiButton";
 import type { ComposerMedia, ComposerSnippet } from "./types";
 import { uploadFile } from "./upload";
 
-export type Counter = { label: string; count: number; max: number; color: string };
+export type Counter = { label: string; count: number; max: number };
 
 type Update = (fn: (parts: PostPart[]) => PostPart[]) => void;
 
@@ -27,7 +27,7 @@ type Props = {
 export function PartsEditor(props: Props) {
   const { parts, update, allowThread } = props;
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {parts.map((part, i) => (
         <PartEditor
           key={i}
@@ -40,18 +40,19 @@ export function PartsEditor(props: Props) {
         />
       ))}
       {allowThread && (
-        <button type="button" className="btn" onClick={() => update((ps) => [...ps, { text: "", mediaIds: [] }])}>
-          + Add to thread
+        <button type="button" className="link-btn text-sm" onClick={() => update((ps) => [...ps, { text: "", mediaIds: [] }])}>
+          Add another post to the thread
         </button>
       )}
     </div>
   );
 }
 
-const STYLES: [TextStyle, string, string][] = [
-  ["bold", "B", "Bold"],
-  ["italic", "I", "Italic"],
-  ["mono", "M", "Monospace"],
+// Networks only take plain text, so "rich text" means Unicode letter styles.
+const STYLES: [TextStyle, string][] = [
+  ["bold", "Bold"],
+  ["italic", "Italic"],
+  ["mono", "Mono"],
 ];
 
 function PartEditor({
@@ -120,7 +121,6 @@ function PartEditor({
 
   return (
     <div
-      className="rounded-lg border border-border bg-panel"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -128,10 +128,14 @@ function PartEditor({
       }}
     >
       {total > 1 && (
-        <div className="flex items-center justify-between border-b border-border px-3 py-1.5 text-xs text-muted">
-          <span>Part {index + 1} of {total}</span>
+        <div className="mb-1 flex items-baseline justify-between text-sm">
+          <span className="text-muted">
+            {index + 1} of {total}
+          </span>
           {index > 0 && (
-            <button type="button" className="underline" onClick={onRemove}>Remove</button>
+            <button type="button" className="danger-btn" onClick={onRemove}>
+              Remove
+            </button>
           )}
         </div>
       )}
@@ -142,83 +146,28 @@ function PartEditor({
           const text = e.target.value;
           change((p) => ({ ...p, text }));
         }}
-        rows={6}
-        placeholder={index === 0 ? "What do you want to share?" : "Continue the thread…"}
-        className="block w-full resize-y bg-transparent p-3 text-[15px] leading-relaxed outline-none"
-        aria-label={`Post text, part ${index + 1}`}
+        rows={index === 0 ? 7 : 4}
+        placeholder={index === 0 ? "Write your post…" : ""}
+        className="input block resize-y px-2.5 py-2 leading-relaxed"
+        aria-label={total > 1 ? `Post ${index + 1} of ${total}` : "Post text"}
       />
 
-      {part.mediaIds.length > 0 && (
-        <div className="flex flex-wrap gap-2 px-3 pb-3">
-          {part.mediaIds.map((id, i) => {
-            const m = media[id];
-            return (
-              <div key={id} className="group relative h-24 w-24 overflow-hidden rounded-md border border-border bg-background">
-                {m?.kind === "video" ? (
-                  <video src={m.src} className="h-full w-full object-cover" muted preload="metadata" />
-                ) : m ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.src} alt={m.altText} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="p-2 text-xs text-muted">missing</div>
-                )}
-                <div className="absolute inset-x-0 bottom-0 flex justify-between bg-black/60 px-1 text-[11px] text-white">
-                  <button type="button" onClick={() => setAltFor(altFor === id ? null : id)} title="Alt text">
-                    ALT{m?.altText ? "✓" : ""}
-                  </button>
-                  {i > 0 && <button type="button" onClick={() => move(i, i - 1)} aria-label="Move left">◀</button>}
-                  <button
-                    type="button"
-                    aria-label="Remove media"
-                    onClick={() => change((p) => ({ ...p, mediaIds: p.mediaIds.filter((x) => x !== id) }))}
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {altFor && media[altFor] && (
-        <div className="flex gap-2 px-3 pb-3">
-          <input
-            className="input"
-            placeholder="Describe the image for people using screen readers"
-            defaultValue={media[altFor].altText}
-            onBlur={async (e) => {
-              const altText = e.target.value;
-              await updateAltText(altFor, altText);
-              onMedia({ ...media[altFor], altText });
-            }}
-            autoFocus
-          />
-          <button type="button" className="btn" onClick={() => setAltFor(null)}>Done</button>
-        </div>
-      )}
-      {uploads.map((u) => (
-        <div key={u.name} className="px-3 pb-2 text-xs text-muted">
-          Uploading {u.name}… {Math.round(u.progress * 100)}%
-        </div>
-      ))}
-      {error && <p className="px-3 pb-2 text-xs text-red-600">{error}</p>}
-
-      <div className="flex flex-wrap items-center gap-1.5 border-t border-border px-2 py-1.5">
-        {STYLES.map(([style, label, title]) => (
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-sm">
+        {STYLES.map(([style, label]) => (
           <button
             key={style}
             type="button"
-            className="btn px-2 font-mono"
-            title={`${title} (select text first)`}
+            className="link-btn"
+            title={`${label}: select some text first`}
             onClick={() => replaceSelection((s) => applyStyle(s, style))}
           >
-            {style === "italic" ? <i>{label}</i> : style === "bold" ? <b>{label}</b> : label}
+            {label}
           </button>
         ))}
         <EmojiButton onPick={(emoji) => replaceSelection(() => emoji)} />
         {snippets.length > 0 && (
           <select
-            className="btn"
+            className="cursor-pointer bg-transparent text-link [field-sizing:content]"
             value=""
             onChange={(e) => {
               const s = snippets.find((x) => x.snippetId === e.target.value);
@@ -226,16 +175,21 @@ function PartEditor({
             }}
             aria-label="Insert snippet"
           >
-            <option value="">Snippets…</option>
+            <option value="">Insert snippet</option>
             {snippets.map((s) => (
               <option key={s.snippetId} value={s.snippetId}>
-                {s.kind === "hashtags" ? "#" : "📝"} {s.name}
+                {s.name}
+                {s.kind === "hashtags" ? " (hashtags)" : ""}
               </option>
             ))}
           </select>
         )}
-        <button type="button" className="btn" onClick={() => fileInput.current?.click()}>Upload</button>
-        <button type="button" className="btn" onClick={() => dialog.current?.showModal()}>Library</button>
+        <button type="button" className="link-btn" onClick={() => fileInput.current?.click()}>
+          Add images or video
+        </button>
+        <button type="button" className="link-btn" onClick={() => dialog.current?.showModal()}>
+          Media library
+        </button>
         <input
           ref={fileInput}
           type="file"
@@ -247,32 +201,101 @@ function PartEditor({
             e.target.value = "";
           }}
         />
-        <div className="ml-auto flex flex-wrap gap-2 text-xs">
+        <span className="ml-auto flex flex-wrap gap-x-3 tabular-nums text-muted">
           {counters(part.text).map((c) => (
             <span
               key={c.label}
-              title={c.label}
-              className={c.count > c.max ? "font-semibold text-red-600" : "text-muted"}
+              title={`${c.count} of ${c.max} characters`}
+              className={c.count > c.max ? "font-medium text-danger" : undefined}
             >
-              <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: c.color }} />
-              {c.max - c.count}
+              {c.label} {c.max - c.count}
             </span>
           ))}
-        </div>
+        </span>
       </div>
 
-      <dialog ref={dialog} className="m-auto w-[min(90vw,48rem)] rounded-lg border border-border bg-panel p-4 text-foreground backdrop:bg-black/40">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold">Media library</h2>
-          <button type="button" className="btn" onClick={() => dialog.current?.close()}>Close</button>
+      {part.mediaIds.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-4">
+          {part.mediaIds.map((id, i) => {
+            const m = media[id];
+            return (
+              <li key={id} className="w-28 text-xs">
+                <div className="size-28 overflow-hidden rounded-[3px] border border-line bg-soft">
+                  {m?.kind === "video" ? (
+                    <video src={m.src} className="size-full object-cover" muted preload="metadata" />
+                  ) : m ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.src} alt={m.altText} className="size-full object-cover" />
+                  ) : (
+                    <p className="p-2 text-muted">Missing file</p>
+                  )}
+                </div>
+                <div className="mt-1 flex gap-2">
+                  <button type="button" className="link-btn" onClick={() => setAltFor(altFor === id ? null : id)}>
+                    {m?.altText ? "Alt text" : "Add alt"}
+                  </button>
+                  {i > 0 && (
+                    <button type="button" className="link-btn" aria-label="Move earlier" onClick={() => move(i, i - 1)}>
+                      ←
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="danger-btn"
+                    onClick={() => change((p) => ({ ...p, mediaIds: p.mediaIds.filter((x) => x !== id) }))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {altFor && media[altFor] && (
+        <div className="mt-2 flex max-w-xl gap-2">
+          <input
+            className="input"
+            aria-label="Alt text"
+            placeholder="Describe the image for people who can't see it"
+            defaultValue={media[altFor].altText}
+            onBlur={async (e) => {
+              const altText = e.target.value;
+              await updateAltText(altFor, altText);
+              onMedia({ ...media[altFor], altText });
+            }}
+            autoFocus
+          />
+          <button type="button" className="btn" onClick={() => setAltFor(null)}>
+            Done
+          </button>
         </div>
-        {library.length === 0 && <p className="text-sm text-muted">No media yet. Upload some first.</p>}
+      )}
+      {uploads.map((u) => (
+        <p key={u.name} className="mt-1 text-sm text-muted">
+          Uploading {u.name}: {Math.round(u.progress * 100)}%
+        </p>
+      ))}
+      {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+
+      <dialog
+        ref={dialog}
+        className="m-auto w-[min(92vw,46rem)] rounded-[4px] border border-line bg-bg p-4 text-fg backdrop:bg-black/40"
+      >
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2>Media library</h2>
+          <button type="button" className="link-btn text-sm" onClick={() => dialog.current?.close()}>
+            Close
+          </button>
+        </div>
+        {library.length === 0 && <p className="hint">Nothing uploaded yet.</p>}
         <div className="grid max-h-[60vh] grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-5">
           {library.map((m) => (
             <button
               key={m.mediaId}
               type="button"
-              className="aspect-square overflow-hidden rounded border border-border hover:ring-2 hover:ring-accent"
+              title={m.originalName}
+              className="aspect-square cursor-pointer overflow-hidden rounded-[3px] border border-line hover:border-fg"
               onClick={() => {
                 onMedia(m);
                 change((p) => (p.mediaIds.includes(m.mediaId) ? p : { ...p, mediaIds: [...p.mediaIds, m.mediaId] }));
@@ -280,10 +303,10 @@ function PartEditor({
               }}
             >
               {m.kind === "video" ? (
-                <video src={m.src} className="h-full w-full object-cover" muted preload="metadata" />
+                <video src={m.src} className="size-full object-cover" muted preload="metadata" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={m.src} alt={m.altText} className="h-full w-full object-cover" />
+                <img src={m.src} alt={m.altText} className="size-full object-cover" />
               )}
             </button>
           ))}
