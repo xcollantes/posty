@@ -1,19 +1,17 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import { LoginForm } from "./LoginForm";
+
+export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   if (await getUser()) redirect("/calendar");
   const { next } = await searchParams;
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
-      <div className="card w-full max-w-sm space-y-6 p-8">
-        <div>
-          <h1 className="text-2xl font-semibold">Posty</h1>
-          <p className="text-sm text-muted">Sign in to schedule your posts.</p>
-        </div>
-        <LoginForm next={typeof next === "string" ? next : ""} />
-      </div>
+    <main className="mx-auto max-w-xs px-4 pt-[16vh]">
+      <h1 className="mb-6">Posty</h1>
+      <LoginForm next={typeof next === "string" ? next : ""} />
     </main>
   );
 }

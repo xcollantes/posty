@@ -3,13 +3,14 @@ import { and, eq, lt, or } from "drizzle-orm";
 import { logout } from "@/app/actions/library";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
+import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
 import { daysFromNow } from "@/lib/time";
 import { Nav } from "./Nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
+  await requireUser();
   const soon = daysFromNow(10);
-  // Accounts that need attention: dead tokens, or LinkedIn-style tokens that expire without refresh.
+  // Accounts that need attention: dead tokens, or LinkedIn tokens about to expire (no refresh).
   const attention = await db
     .select({ name: schema.socialAccounts.name, network: schema.socialAccounts.network })
     .from(schema.socialAccounts)
@@ -24,33 +25,35 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
 
   return (
-    <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="border-b border-border bg-panel md:sticky md:top-0 md:h-screen md:w-56 md:shrink-0 md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between p-4">
-          <Link href="/calendar" className="text-lg font-semibold">Posty</Link>
-          <Link href="/compose" className="btn-primary md:hidden">New post</Link>
-        </div>
-        <div className="hidden px-4 pb-3 md:block">
-          <Link href="/compose" className="btn-primary w-full">New post</Link>
-        </div>
-        <Nav />
-        <div className="hidden border-t border-border p-4 text-xs text-muted md:absolute md:bottom-0 md:block md:w-56">
-          <div className="truncate">{user.email}</div>
-          <form action={logout}>
-            <button className="mt-1 underline cursor-pointer">Sign out</button>
-          </form>
-        </div>
-      </aside>
-      <main className="min-w-0 flex-1 p-4 md:p-6">
-        {attention.length > 0 && (
-          <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            {attention.length === 1 ? "An account needs" : `${attention.length} accounts need`} reconnecting:{" "}
-            {attention.map((a) => `${a.name} (${a.network})`).join(", ")}.{" "}
-            <Link href="/accounts" className="font-medium underline">Go to accounts</Link>
+    <>
+      <header className="border-b border-line">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-7 gap-y-2 px-4 py-2.5">
+          <Link href="/calendar" className="font-semibold text-fg hover:no-underline">
+            Posty
+          </Link>
+          <Nav />
+          <div className="ml-auto flex items-center gap-5 text-sm">
+            <Link href="/compose" className="btn-primary">
+              New post
+            </Link>
+            <form action={logout}>
+              <button className="cursor-pointer text-muted hover:text-fg">Sign out</button>
+            </form>
           </div>
-        )}
-        {children}
-      </main>
-    </div>
+        </div>
+      </header>
+      {attention.length > 0 && (
+        <div className="bg-warn-bg text-warn-fg">
+          <p className="mx-auto max-w-6xl px-4 py-2 text-sm">
+            {attention.map((a) => `${a.name} (${NETWORKS[a.network as NetworkId]?.label ?? a.network})`).join(", ")}{" "}
+            {attention.length === 1 ? "needs" : "need"} to be reconnected.{" "}
+            <Link href="/accounts" className="text-warn-fg underline">
+              Go to Accounts
+            </Link>
+          </p>
+        </div>
+      )}
+      <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+    </>
   );
 }
