@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --panel: #ffffff;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --accent: #0284c7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b1120;
+    --foreground: #e2e8f0;
+    --panel: #111827;
+    --border: #1f2937;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Shared form controls (in the components layer so utilities like md:hidden win) */
+@layer components {
+.input {
+  @apply w-full rounded-md border border-border bg-panel px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/40;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-sm font-medium hover:bg-background disabled:opacity-50 cursor-pointer;
+}
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 cursor-pointer;
+}
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950 cursor-pointer;
+}
+.card {
+  @apply rounded-lg border border-border bg-panel p-4;
+}
+.label {
+  @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;
+}
+
+}
+
+/* FullCalendar tweaks */
+.fc {
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: var(--panel);
+  --fc-today-bg-color: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 0.85rem;
+}
+.fc .fc-button {
+  @apply !bg-panel !text-foreground !border-border !shadow-none text-sm capitalize;
+}
+.fc .fc-button-active {
+  @apply !bg-accent !text-white;
+}
+.fc-event {
+  cursor: pointer;
+}
