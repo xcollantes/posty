@@ -31,12 +31,14 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   // - verified identity: email + identity (5) and identity (5). Identities
   //   can't be forged, so no account-wide key is needed and guessing from one
   //   device never locks out the owner's others.
-  // - no identity: one shared email + "unknown" key (20), which only slows
-  //   other unidentified clients, never verified ones.
+  // - no identity: email + "unknown" (20), plus a total "unknown" key (50) so
+  //   unidentified traffic can't mint unlimited keys and fill the throttle
+  //   table. Both only slow other unidentified clients, never verified ones.
+  // Every source is therefore capped before it can create many keys.
   const identity = h.get("tailscale-user-login")?.slice(0, 200);
   const limits: [string, number][] = identity
     ? [[`email:${email}|${identity}`, 5], [`client:${identity}`, 5]]
-    : [[`email:${email}|unknown`, 20]];
+    : [[`email:${email}|unknown`, 20], ["client:unknown", 50]];
   const wait = Math.max(...limits.map(([key]) => loginBlockedFor(key)));
   if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
 
