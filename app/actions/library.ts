@@ -34,15 +34,15 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   // serve` sets and strips from client input; anything without it (tagged
   // devices, other proxies) shares one "unknown" bucket rather than trusting a
   // spoofable header. Limits, as [key, free attempts]:
-  // - email + client (5): guessing on one device never locks out the owner's others
-  // - client (5)
-  // - email alone (50): caps guessing spread across many clients
-  const client = h.get("tailscale-user-login")?.slice(0, 200) ?? "unknown";
-  const limits: [string, number][] = [
-    [`email:${email}|${client}`, 5],
-    [`client:${client}`, 5],
-    [`email:${email}`, 50],
-  ];
+  // - verified identity: email + identity (5) and identity (5). Identities
+  //   can't be forged, so no account-wide key is needed and guessing from one
+  //   device never locks out the owner's others.
+  // - no identity: one shared email + "unknown" key (20), which only slows
+  //   other unidentified clients, never verified ones.
+  const identity = h.get("tailscale-user-login")?.slice(0, 200);
+  const limits: [string, number][] = identity
+    ? [[`email:${email}|${identity}`, 5], [`client:${identity}`, 5]]
+    : [[`email:${email}|unknown`, 20]];
   const wait = Math.max(...limits.map(([key]) => loginBlockedFor(key)));
   if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
 
