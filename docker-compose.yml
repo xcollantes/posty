@@ -1,0 +1,81 @@
+# Posty: app + worker + Postgres, reachable only through a Tailscale sidecar.
+#   https://<TS_HOSTNAME>.<tailnet>.ts.net        UI (tailnet only)
+#   https://<TS_HOSTNAME>.<tailnet>.ts.net:8443   /media/ only, public via Funnel
+services:
+  tailscale:
+    image: tailscale/tailscale:v1.104.5
+    hostname: ${TS_HOSTNAME:-posty}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?Set TS_AUTHKEY in .env}
+      TS_HOSTNAME: ${TS_HOSTNAME:-posty}
+      TS_EXTRA_ARGS: ${TS_EXTRA_ARGS:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_AUTH_ONCE: "true"
+    volumes:
+      - ts-state:/var/lib/tailscale
+      # Mount the directory, not the file, so edits are picked up.
+      - ./tailscale:/config:ro
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: posty:latest
+    # Share the sidecar's network namespace; Tailscale proxies to 127.0.0.1:3000.
+    network_mode: service:tailscale
+    env_file: .env
+    environment:
+      # Reason: Next.js binds $HOSTNAME, which would otherwise be the sidecar's bridge IP.
+      HOSTNAME: 127.0.0.1
+      PORT: "3000"
+      DATABASE_URL: postgres://posty:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/posty
+      MEDIA_DIR: /data/media
+    volumes:
+      - media:/data/media
+    depends_on:
+      db:
+        condition: service_healthy
+      tailscale:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    build: .
+    image: posty:latest
+    command: ["node", "dist/worker.mjs"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://posty:${POSTGRES_PASSWORD}@db:5432/posty
+      MEDIA_DIR: /data/media
+    volumes:
+      - media:/data/media
+    depends_on:
+      app:
+        condition: service_healthy # migrations have run
+    restart: unless-stopped
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: posty
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: posty
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posty -d posty"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  media:
+  ts-state:
