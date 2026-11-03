@@ -8,6 +8,8 @@ import type { PublishResult } from "@/lib/networks/types";
 
 const MAX_ATTEMPTS = 3;
 const STUCK_MINUTES = 15;
+// Posts overdue by more than this (worker was down) are failed, not sent late.
+const MISSED_MINUTES = 60;
 
 export const log = (msg: string) => console.log(`${new Date().toISOString()} ${msg}`);
 
@@ -149,6 +151,19 @@ export async function failStuck() {
       error = 'Interrupted while publishing. Check the network before retrying.'
     where status = 'publishing' and locked_at < now() - make_interval(mins => ${STUCK_MINUTES})
     returning post_id`);
+  for (const r of new Set(rows.map((r) => r.post_id))) await rollupPost(r);
+}
+
+/** Never-attempted targets whose slot passed while the worker was down fail instead of posting late. */
+export async function failMissed() {
+  const rows = await db.execute<{ post_id: string }>(sql`
+    update post_targets t set status = 'failed',
+      error = 'Missed its scheduled time while the worker was down. Reschedule to publish.'
+    from posts p
+    where p.post_id = t.post_id and p.status = 'scheduled' and t.status = 'pending'
+      and t.next_attempt_at is null
+      and p.scheduled_at < now() - make_interval(mins => ${MISSED_MINUTES})
+    returning t.post_id`);
   for (const r of new Set(rows.map((r) => r.post_id))) await rollupPost(r);
 }
 

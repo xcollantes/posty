@@ -29,7 +29,7 @@ vi.mock("@/lib/networks", async () => {
 const { db, schema } = await import("@/lib/db");
 const { encrypt } = await import("@/lib/crypto");
 const { NetworkError } = await import("@/lib/networks/http");
-const { claimDue, failStuck, publishTarget } = await import("@/lib/publisher");
+const { claimDue, failMissed, failStuck, publishTarget } = await import("@/lib/publisher");
 
 const reachable = await db.execute(sql`select 1`).then(() => true, () => false);
 
@@ -155,5 +155,19 @@ describe.skipIf(!reachable)("publisher", () => {
     expect((await target(targetIds[0])).status).toBe("failed");
     expect((await post(postId)).status).toBe("failed");
     expect(calls).toEqual([]);
+  });
+
+  it("fails posts overdue past the cutoff instead of publishing late", async () => {
+    const stale = await makePost(["stale"]);
+    const fresh = await makePost(["fresh"]);
+    await db
+      .update(schema.posts)
+      .set({ scheduledAt: new Date(Date.now() - 2 * 3_600_000) })
+      .where(eq(schema.posts.postId, stale.postId));
+    await failMissed();
+    expect((await target(stale.targetIds[0])).status).toBe("failed");
+    expect((await post(stale.postId)).status).toBe("failed");
+    expect((await target(fresh.targetIds[0])).status).toBe("pending");
+    expect(await claimDue(10)).toEqual(fresh.targetIds);
   });
 });
