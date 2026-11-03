@@ -70,6 +70,9 @@ export function recordLoginFailure(key: string) {
   const count = (failures.get(key)?.count ?? 0) + 1;
   // 5 free attempts, then 2^n seconds, capped at 15 minutes.
   const delay = count <= 5 ? 0 : Math.min(2 ** (count - 5), 900) * 1000;
+  // Cap memory: drop the oldest entry (Map keeps insertion order).
+  if (failures.size >= 10_000 && !failures.has(key)) failures.delete(failures.keys().next().value!);
+  failures.delete(key);
   failures.set(key, { count, until: Date.now() + delay });
 }
 

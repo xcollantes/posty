@@ -27,16 +27,27 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   const email = str(form, "email").toLowerCase();
   // Throttle per account as well as per client: the client key comes from
   // headers, which only `tailscale serve` can set reliably.
-  const keys = [`email:${email}`, `client:${h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local"}`];
-  const wait = Math.max(...keys.map(loginBlockedFor));
-  if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
+  const clientKey = `client:${(h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local").slice(0, 200)}`;
+  const tooMany = (s: number) => ({ error: `Too many attempts. Try again in ${s}s.` });
+  if (loginBlockedFor(clientKey)) return tooMany(loginBlockedFor(clientKey));
 
-  const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email));
-  if (!user || !(await verifyPassword(str(form, "password"), user.passwordHash))) {
-    keys.forEach(recordLoginFailure);
+  const [user] = email.length <= 320
+    ? await db.select().from(schema.users).where(eq(schema.users.email, email))
+    : [];
+  const ok = !!user && (await verifyPassword(str(form, "password"), user.passwordHash));
+  // Reason: the per-account limit is checked after the password, so someone
+  // guessing can't lock the real owner out; only existing accounts are tracked.
+  const emailKey = user ? `email:${user.userId}` : null;
+  if (!ok) {
+    recordLoginFailure(clientKey);
+    if (emailKey) {
+      recordLoginFailure(emailKey);
+      if (loginBlockedFor(emailKey)) return tooMany(loginBlockedFor(emailKey));
+    }
     return { error: "Wrong email or password" };
   }
-  keys.forEach(clearLoginFailures);
+  clearLoginFailures(clientKey);
+  if (emailKey) clearLoginFailures(emailKey);
   await createSession(user.userId);
   redirect(safeNext(str(form, "next")));
 }
@@ -46,7 +57,9 @@ function safeNext(next: string): string {
   if (!/^\/(?![\/\\])/.test(next) || /[\\\x00-\x1f]/.test(next)) return "/calendar";
   const base = new URL(appUrl());
   const target = new URL(next, base);
-  return target.origin === base.origin ? `${target.pathname}${target.search}` : "/calendar";
+  // Check the normalized result too: "/a/..//evil.com" becomes "//evil.com".
+  const path = `/${target.pathname.replace(/^[\/\\]+/, "")}`;
+  return target.origin === base.origin ? `${path}${target.search}` : "/calendar";
 }
 
 export async function logout() {
