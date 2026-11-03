@@ -13,6 +13,7 @@ import {
 } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
+import { appUrl } from "@/lib/env";
 import { deleteMediaFiles } from "@/lib/media";
 import { headers } from "next/headers";
 
@@ -23,20 +24,29 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 export async function login(_prev: FormState, form: FormData): Promise<FormState> {
   const h = await headers();
-  const ip = h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local";
-  const wait = loginBlockedFor(ip);
+  const email = str(form, "email").toLowerCase();
+  // Throttle per account as well as per client: the client key comes from
+  // headers, which only `tailscale serve` can set reliably.
+  const keys = [`email:${email}`, `client:${h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local"}`];
+  const wait = Math.max(...keys.map(loginBlockedFor));
   if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
 
-  const email = str(form, "email").toLowerCase();
   const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email));
   if (!user || !(await verifyPassword(str(form, "password"), user.passwordHash))) {
-    recordLoginFailure(ip);
+    keys.forEach(recordLoginFailure);
     return { error: "Wrong email or password" };
   }
-  clearLoginFailures(ip);
+  keys.forEach(clearLoginFailures);
   await createSession(user.userId);
-  const next = str(form, "next");
-  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/calendar");
+  redirect(safeNext(str(form, "next")));
+}
+
+/** Only same-origin paths; rejects //host, /\host and control characters. */
+function safeNext(next: string): string {
+  if (!/^\/(?![\/\\])/.test(next) || /[\\\x00-\x1f]/.test(next)) return "/calendar";
+  const base = new URL(appUrl());
+  const target = new URL(next, base);
+  return target.origin === base.origin ? `${target.pathname}${target.search}` : "/calendar";
 }
 
 export async function logout() {
