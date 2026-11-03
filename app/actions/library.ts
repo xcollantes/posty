@@ -30,20 +30,28 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
   if (email.length > 320) return { error: "Wrong email or password" };
   // Limits are checked before any password is tested (fail closed), and every
   // attempted email is tracked alike so responses don't reveal which accounts
-  // exist. The account limit is keyed on email + client, so guessing from one
-  // device never locks the owner out on another. The client identity comes
-  // from `tailscale serve`, which strips client-supplied Tailscale-User-* headers.
-  const client = (h.get("tailscale-user-login") ?? h.get("x-forwarded-for") ?? "local").slice(0, 200);
-  const keys = [`email:${email}|${client}`, `client:${client}`];
-  const wait = Math.max(...keys.map(loginBlockedFor));
+  // exist. The client identity is only Tailscale-User-Login, which `tailscale
+  // serve` sets and strips from client input; anything without it (tagged
+  // devices, other proxies) shares one "unknown" bucket rather than trusting a
+  // spoofable header. Limits, as [key, free attempts]:
+  // - email + client (5): guessing on one device never locks out the owner's others
+  // - client (5)
+  // - email alone (50): caps guessing spread across many clients
+  const client = h.get("tailscale-user-login")?.slice(0, 200) ?? "unknown";
+  const limits: [string, number][] = [
+    [`email:${email}|${client}`, 5],
+    [`client:${client}`, 5],
+    [`email:${email}`, 50],
+  ];
+  const wait = Math.max(...limits.map(([key]) => loginBlockedFor(key)));
   if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
 
   const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email));
   if (!user || !(await verifyPassword(str(form, "password"), user.passwordHash))) {
-    keys.forEach(recordLoginFailure);
+    for (const [key, free] of limits) recordLoginFailure(key, free);
     return { error: "Wrong email or password" };
   }
-  keys.forEach(clearLoginFailures);
+  for (const [key] of limits) clearLoginFailures(key);
   await createSession(user.userId);
   redirect(safeNext(str(form, "next")));
 }

@@ -66,10 +66,10 @@ export function loginBlockedFor(key: string): number {
   return entry && entry.until > Date.now() ? Math.ceil((entry.until - Date.now()) / 1000) : 0;
 }
 
-export function recordLoginFailure(key: string) {
+export function recordLoginFailure(key: string, freeAttempts = 5) {
   const count = (failures.get(key)?.count ?? 0) + 1;
-  // 5 free attempts, then 2^n seconds, capped at 15 minutes.
-  const delay = count <= 5 ? 0 : Math.min(2 ** (count - 5), 900) * 1000;
+  // `freeAttempts` free, then 2^n seconds, capped at 15 minutes.
+  const delay = count <= freeAttempts ? 0 : Math.min(2 ** (count - freeAttempts), 900) * 1000;
   // Cap memory: drop the oldest entry (Map keeps insertion order).
   if (failures.size >= 10_000 && !failures.has(key)) failures.delete(failures.keys().next().value!);
   failures.delete(key);
