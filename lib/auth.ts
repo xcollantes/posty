@@ -57,23 +57,3 @@ export async function requireUser(): Promise<CurrentUser> {
   if (!user) redirect("/login");
   return user;
 }
-
-// ponytail: in-memory failed-login throttle; fine for one container behind a tailnet.
-const failures = new Map<string, { count: number; until: number }>();
-
-export function loginBlockedFor(key: string): number {
-  const entry = failures.get(key);
-  return entry && entry.until > Date.now() ? Math.ceil((entry.until - Date.now()) / 1000) : 0;
-}
-
-export function recordLoginFailure(key: string, freeAttempts = 5) {
-  const count = (failures.get(key)?.count ?? 0) + 1;
-  // `freeAttempts` free, then 2^n seconds, capped at 15 minutes.
-  const delay = count <= freeAttempts ? 0 : Math.min(2 ** (count - freeAttempts), 900) * 1000;
-  // Cap memory: drop the oldest entry (Map keeps insertion order).
-  if (failures.size >= 10_000 && !failures.has(key)) failures.delete(failures.keys().next().value!);
-  failures.delete(key);
-  failures.set(key, { count, until: Date.now() + delay });
-}
-
-export const clearLoginFailures = (key: string) => failures.delete(key);

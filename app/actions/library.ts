@@ -3,14 +3,8 @@
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import {
-  clearLoginFailures,
-  createSession,
-  destroySession,
-  loginBlockedFor,
-  recordLoginFailure,
-  requireUser,
-} from "@/lib/auth";
+import { createSession, destroySession, requireUser } from "@/lib/auth";
+import { clearLoginFailures, loginBlockedFor, recordLoginFailure } from "@/lib/throttle";
 import { hashPassword, verifyPassword } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
 import { appUrl } from "@/lib/env";

@@ -135,3 +135,18 @@ describe("validation", () => {
     expect(validatePart("pinterest", { text: "", media: [img(100, 100)] }, {})).toContain("Pinterest: Board is required");
   });
 });
+
+describe("login throttle", () => {
+  it("blocks after the free attempts and never evicts live lockouts", async () => {
+    const { clearLoginFailures, loginBlockedFor, recordLoginFailure } = await import("@/lib/throttle");
+    for (let i = 0; i < 6; i++) recordLoginFailure("victim", 5);
+    expect(loginBlockedFor("victim")).toBeGreaterThan(0);
+    // Flood with fresh keys: the table fills, but the live lockout stays.
+    for (let i = 0; i < 10_050; i++) recordLoginFailure(`flood-${i}`, 5);
+    expect(loginBlockedFor("victim")).toBeGreaterThan(0);
+    // Full of recent entries: unknown keys fail closed.
+    expect(loginBlockedFor("never-seen")).toBeGreaterThan(0);
+    clearLoginFailures("victim");
+    expect(loginBlockedFor("victim")).toBe(0);
+  });
+});
