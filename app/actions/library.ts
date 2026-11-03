@@ -47,7 +47,8 @@ export async function login(_prev: FormState, form: FormData): Promise<FormState
     for (const [key, free] of limits) recordLoginFailure(key, free);
     return { error: "Wrong email or password" };
   }
-  for (const [key] of limits) clearLoginFailures(key);
+  // The shared "unknown" total only decays with time; a success must not reset it.
+  for (const [key] of limits) if (key !== "client:unknown") clearLoginFailures(key);
   await createSession(user.userId);
   redirect(safeNext(str(form, "next")));
 }
