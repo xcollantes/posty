@@ -110,7 +110,9 @@ curl -I https://posty.tail1234.ts.net/                           # no answer
 - **Failures**: a post that fails is never re-posted blindly. Only errors
   that happen before anything goes live (429/5xx) are retried, at most 3
   times. A worker crash mid-publish marks the post *failed* so you can check
-  the network before retrying.
+  the network before retrying. A post that comes due more than an hour
+  while the worker is down is marked *failed* instead of going out late;
+  use Retry to send it.
 - **Tokens**: the worker refreshes Instagram, Threads, Pinterest, X and
   TikTok tokens in the background. LinkedIn tokens can't be refreshed by
   personal apps, so a banner asks you to reconnect every 60 days.

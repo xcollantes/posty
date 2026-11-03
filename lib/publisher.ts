@@ -154,17 +154,24 @@ export async function failStuck() {
   for (const r of new Set(rows.map((r) => r.post_id))) await rollupPost(r);
 }
 
-/** Never-attempted targets whose slot passed while the worker was down fail instead of posting late. */
+/**
+ * Never-attempted targets whose slot passed while the worker was down fail
+ * instead of posting late. A post saved with a past time (e.g. re-scheduling
+ * a missed post without changing its time) has a recent updated_at, so it
+ * still goes out right away.
+ */
 export async function failMissed() {
   const rows = await db.execute<{ post_id: string }>(sql`
     update post_targets t set status = 'failed',
-      error = 'Missed its scheduled time while the worker was down. Reschedule to publish.'
+      error = 'Missed its scheduled time while the worker was down. Use Retry, or edit the post to pick a new time.'
     from posts p
     where p.post_id = t.post_id and p.status = 'scheduled' and t.status = 'pending'
       and t.next_attempt_at is null
-      and p.scheduled_at < now() - make_interval(mins => ${MISSED_MINUTES})
+      and greatest(p.scheduled_at, p.updated_at) < now() - make_interval(mins => ${MISSED_MINUTES})
     returning t.post_id`);
-  for (const r of new Set(rows.map((r) => r.post_id))) await rollupPost(r);
+  const postIds = new Set(rows.map((r) => r.post_id));
+  for (const id of postIds) await rollupPost(id);
+  if (postIds.size) await notify(`Posty: ${postIds.size} scheduled post(s) missed their time while the worker was down`);
 }
 
 const DAY = 86_400_000;
