@@ -10,6 +10,16 @@ import { calendarEvents, reschedulePost } from "@/app/actions/posts";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
 
 const MOVABLE = new Set(["draft", "scheduled", "failed"]);
+// Exactly one color class per status (events render inside <a>, which is link-colored).
+const STATUS_CLASS: Record<string, string> = {
+  scheduled: "text-fg",
+  draft: "italic text-muted",
+  published: "text-muted",
+  partial: "text-muted",
+  failed: "text-danger",
+};
+
+type Extra = { status: string; networks: NetworkId[]; tagColor: string | null };
 
 export function CalendarView() {
   const router = useRouter();
@@ -17,34 +27,38 @@ export function CalendarView() {
     <FullCalendar
       plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
       initialView="dayGridMonth"
-      headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay" }}
+      headerToolbar={{ left: "title", center: "", right: "today prev,next dayGridMonth,timeGridWeek" }}
+      buttonText={{ today: "Today", month: "Month", week: "Week" }}
       height="auto"
       nowIndicator
       editable
-      eventStartEditable
       eventDurationEditable={false}
       displayEventEnd={false}
+      dayMaxEvents={4}
+      eventTimeFormat={{ hour: "numeric", minute: "2-digit", meridiem: "short" }}
       events={async (info: EventSourceFuncArg) => {
         const events = await calendarEvents(info.start.toISOString(), info.end.toISOString());
         return events.map((e) => ({
           id: e.id,
           title: e.title,
           start: e.start,
-          backgroundColor: e.color,
-          borderColor: e.color,
           editable: MOVABLE.has(e.status),
-          classNames: e.status === "draft" ? ["opacity-60"] : [],
-          extendedProps: { status: e.status, networks: e.networks },
+          backgroundColor: "transparent",
+          borderColor: "transparent",
+          textColor: "inherit",
+          extendedProps: { status: e.status, networks: e.networks as NetworkId[], tagColor: e.tagColor } satisfies Extra,
         }));
       }}
       eventContent={(arg) => {
-        const nets = (arg.event.extendedProps.networks as NetworkId[]) ?? [];
+        const { status, networks, tagColor } = arg.event.extendedProps as Extra;
+        const where = networks.map((n) => NETWORKS[n]?.label ?? n).join(", ");
         return (
-          <div className="flex min-w-0 items-center gap-1 overflow-hidden px-1 text-xs">
-            <span className="shrink-0 font-medium">{arg.timeText}</span>
-            {nets.map((n) => (
-              <span key={n} className="inline-block h-2 w-2 shrink-0 rounded-full border border-white/70" style={{ background: NETWORKS[n]?.color }} title={NETWORKS[n]?.label} />
-            ))}
+          <div
+            className={`flex min-w-0 gap-1.5 overflow-hidden text-[13px] leading-snug ${STATUS_CLASS[status] ?? "text-fg"}`}
+            style={tagColor ? { borderLeft: `2px solid ${tagColor}`, paddingLeft: 4 } : undefined}
+            title={`${where}${status === "scheduled" ? "" : ` (${status})`}: ${arg.event.title}`}
+          >
+            <span className="shrink-0 tabular-nums text-muted">{arg.timeText}</span>
             <span className="truncate">{arg.event.title}</span>
           </div>
         );
@@ -54,11 +68,11 @@ export function CalendarView() {
         const res = await reschedulePost(arg.event.id, arg.event.start!.toISOString());
         if (!res.ok) {
           arg.revert();
-          console.warn(res.error);
+          window.alert(res.error);
         }
       }}
       dateClick={(arg) => {
-        // Month view clicks give midnight; default to 9:00 that day.
+        // Month view gives midnight; default to 9:00 that day.
         const at = new Date(arg.date);
         if (arg.allDay) at.setHours(9, 0, 0, 0);
         if (at.getTime() < Date.now()) return;

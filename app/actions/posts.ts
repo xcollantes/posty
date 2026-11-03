@@ -224,7 +224,8 @@ export type CalendarEvent = {
   title: string;
   start: string;
   status: string;
-  color: string;
+  /** Color of the post's first tag, if any. */
+  tagColor: string | null;
   networks: string[];
 };
 
@@ -246,19 +247,12 @@ export async function calendarEvents(startIso: string, endIso: string): Promise<
     .leftJoin(schema.tags, eq(schema.tags.tagId, schema.postTags.tagId))
     .where(between(schema.posts.scheduledAt, new Date(startIso), new Date(endIso)))
     .groupBy(schema.posts.postId);
-  const statusColor: Record<string, string> = {
-    draft: "#94a3b8",
-    scheduled: "#0ea5e9",
-    published: "#16a34a",
-    partial: "#f59e0b",
-    failed: "#dc2626",
-  };
   return rows.map((r) => ({
     id: r.postId,
     title: r.content.parts[0]?.text.slice(0, 80) || "(media only)",
     start: r.scheduledAt!.toISOString(),
     status: r.status,
-    color: r.tagColor ?? statusColor[r.status] ?? "#0ea5e9",
+    tagColor: r.tagColor,
     networks: r.networks,
   }));
 }
