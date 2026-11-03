@@ -10,13 +10,15 @@ export function PostActions({ postId, status }: { postId: string; status: string
   const [pending, start] = useTransition();
   const editable = status === "draft" || status === "scheduled" || status === "failed";
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {editable && <Link href={`/compose/${postId}`} className="btn">Edit</Link>}
+    <div className="flex gap-3 whitespace-nowrap">
+      {editable && <Link href={`/compose/${postId}`}>Edit</Link>}
       {(status === "failed" || status === "partial") && (
-        <button className="btn" disabled={pending} onClick={() => start(() => retryPost(postId))}>Retry failed</button>
+        <button className="link-btn" disabled={pending} onClick={() => start(() => retryPost(postId))}>
+          Retry
+        </button>
       )}
       <button
-        className="btn"
+        className="link-btn"
         disabled={pending}
         onClick={() =>
           start(async () => {
@@ -28,11 +30,11 @@ export function PostActions({ postId, status }: { postId: string; status: string
         Duplicate
       </button>
       <button
-        className="btn-danger"
+        className="danger-btn"
         disabled={pending}
         onClick={() => {
-          // Deleting here never removes posts that are already live on a network.
-          if (window.confirm("Delete this post from Posty? Posts already live on a network stay there.")) {
+          // Only removes it from Posty; anything already live stays on the network.
+          if (window.confirm("Delete this post from Posty? Anything already posted stays on the network.")) {
             start(() => deletePost(postId));
           }
         }}

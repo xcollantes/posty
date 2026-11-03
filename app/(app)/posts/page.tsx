@@ -1,23 +1,28 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { and, asc, desc, eq, exists, ilike, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
 import { PostActions } from "./PostActions";
 
+export const metadata: Metadata = { title: "Posts" };
+
 const TABS = {
-  scheduled: { label: "Scheduled", statuses: ["scheduled"] },
-  drafts: { label: "Drafts", statuses: ["draft"] },
-  published: { label: "Published", statuses: ["published", "partial"] },
-  failed: { label: "Failed", statuses: ["failed", "partial"] },
+  scheduled: { label: "Scheduled", statuses: ["scheduled"], empty: "Nothing scheduled." },
+  drafts: { label: "Drafts", statuses: ["draft"], empty: "No drafts." },
+  published: { label: "Published", statuses: ["published", "partial"], empty: "Nothing published yet." },
+  failed: { label: "Failed", statuses: ["failed", "partial"], empty: "No failed posts." },
 } as const;
 type Tab = keyof typeof TABS;
 
-const STATUS_STYLE: Record<string, string> = {
-  pending: "text-muted",
-  publishing: "text-sky-600",
-  published: "text-green-600",
-  failed: "text-red-600",
+const CELL = "max-sm:block max-sm:border-0 max-sm:py-0.5 max-sm:pr-0";
+
+// Pending targets show nothing: the post's date already says when.
+const TARGET_STATUS: Record<string, { label: string; className: string }> = {
+  publishing: { label: "posting now", className: "text-link" },
+  published: { label: "posted", className: "text-ok" },
+  failed: { label: "failed", className: "text-danger" },
 };
 
 export default async function PostsPage({ searchParams }: PageProps<"/posts">) {
@@ -33,21 +38,27 @@ export default async function PostsPage({ searchParams }: PageProps<"/posts">) {
   if (accountFilter) {
     filters.push(
       exists(
-        db.select().from(schema.postTargets).where(
-          and(eq(schema.postTargets.postId, schema.posts.postId), eq(schema.postTargets.socialAccountId, accountFilter)),
-        ),
+        db
+          .select()
+          .from(schema.postTargets)
+          .where(
+            and(eq(schema.postTargets.postId, schema.posts.postId), eq(schema.postTargets.socialAccountId, accountFilter)),
+          ),
       ),
     );
   }
   if (tagFilter) {
     filters.push(
       exists(
-        db.select().from(schema.postTags).where(and(eq(schema.postTags.postId, schema.posts.postId), eq(schema.postTags.tagId, tagFilter))),
+        db
+          .select()
+          .from(schema.postTags)
+          .where(and(eq(schema.postTags.postId, schema.posts.postId), eq(schema.postTags.tagId, tagFilter))),
       ),
     );
   }
 
-  const [posts, accounts, tags] = await Promise.all([
+  const [posts, accounts, tags, counts] = await Promise.all([
     db
       .select()
       .from(schema.posts)
@@ -56,106 +67,174 @@ export default async function PostsPage({ searchParams }: PageProps<"/posts">) {
       .limit(100),
     db.select().from(schema.socialAccounts).orderBy(asc(schema.socialAccounts.name)),
     db.select().from(schema.tags).orderBy(asc(schema.tags.name)),
+    db.select({ status: schema.posts.status, n: count() }).from(schema.posts).groupBy(schema.posts.status),
   ]);
   const ids = posts.map((p) => p.postId);
-  const [targets, postTags] = ids.length
+  const mediaIds = posts.flatMap((p) => p.content.parts.flatMap((part) => part.mediaIds));
+  const [targets, postTags, mediaKinds] = ids.length
     ? await Promise.all([
         db.select().from(schema.postTargets).where(inArray(schema.postTargets.postId, ids)),
         db.select().from(schema.postTags).where(inArray(schema.postTags.postId, ids)),
+        mediaIds.length
+          ? db
+              .select({ mediaId: schema.media.mediaId, mime: schema.media.mime })
+              .from(schema.media)
+              .where(inArray(schema.media.mediaId, mediaIds))
+          : [],
       ])
-    : [[], []];
+    : [[], [], []];
+  const isVideo = new Map(mediaKinds.map((m) => [m.mediaId, m.mime.startsWith("video/")]));
+  const plural = (n: number, word: string) => (n === 1 ? `1 ${word}` : `${n} ${word}s`);
   const accountById = new Map(accounts.map((a) => [a.socialAccountId, a]));
   const tagById = new Map(tags.map((t) => [t.tagId, t]));
-  const fmt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: user.timezone });
-
-  const href = (patch: Record<string, string>) => {
-    const p = new URLSearchParams({ status: tab, ...(q && { q }), ...(accountFilter && { account: accountFilter }), ...(tagFilter && { tag: tagFilter }), ...patch });
-    for (const [k, v] of [...p]) if (!v) p.delete(k);
-    return `/posts?${p}`;
-  };
+  const byStatus = Object.fromEntries(counts.map((c) => [c.status, c.n]));
+  const tabCount = (t: Tab) => TABS[t].statuses.reduce((n, s) => n + (byStatus[s] ?? 0), 0);
+  const fmt = new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: user.timezone,
+  });
+  const filtered = Boolean(q || accountFilter || tagFilter);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Posts</h1>
-        <Link href="/compose" className="btn-primary">New post</Link>
-      </div>
-      <nav className="flex gap-1 border-b border-border text-sm">
+    <div>
+      <h1>Posts</h1>
+
+      <nav className="mt-4 flex flex-wrap gap-x-6 border-b border-line text-sm">
         {(Object.keys(TABS) as Tab[]).map((t) => (
-          <Link key={t} href={href({ status: t })} className={`-mb-px border-b-2 px-3 py-1.5 ${t === tab ? "border-accent font-medium" : "border-transparent text-muted"}`}>
-            {TABS[t].label}
+          <Link
+            key={t}
+            href={`/posts?status=${t}`}
+            className={`-mb-px border-b-2 pb-2 hover:no-underline ${
+              t === tab ? "border-fg font-medium text-fg" : "border-transparent text-muted hover:text-fg"
+            }`}
+          >
+            {TABS[t].label} <span className="font-normal text-muted">{tabCount(t)}</span>
           </Link>
         ))}
       </nav>
-      <form className="flex flex-wrap gap-2" action="/posts">
+
+      <form className="mt-4 flex flex-wrap items-center gap-2" action="/posts">
         <input type="hidden" name="status" value={tab} />
-        <input name="q" defaultValue={q} placeholder="Search text…" className="input max-w-xs" />
-        <select name="account" defaultValue={accountFilter} className="input max-w-[12rem]">
+        <input name="q" defaultValue={q} placeholder="Search" aria-label="Search post text" className="input w-52" />
+        <select name="account" defaultValue={accountFilter} aria-label="Account" className="input w-auto">
           <option value="">All accounts</option>
           {accounts.map((a) => (
-            <option key={a.socialAccountId} value={a.socialAccountId}>{a.name} ({a.network})</option>
+            <option key={a.socialAccountId} value={a.socialAccountId}>
+              {a.name} ({NETWORKS[a.network as NetworkId]?.label ?? a.network})
+            </option>
           ))}
         </select>
-        <select name="tag" defaultValue={tagFilter} className="input max-w-[10rem]">
-          <option value="">All tags</option>
-          {tags.map((t) => (
-            <option key={t.tagId} value={t.tagId}>{t.name}</option>
-          ))}
-        </select>
+        {tags.length > 0 && (
+          <select name="tag" defaultValue={tagFilter} aria-label="Tag" className="input w-auto">
+            <option value="">All tags</option>
+            {tags.map((t) => (
+              <option key={t.tagId} value={t.tagId}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        )}
         <button className="btn">Filter</button>
+        {filtered && (
+          <Link href={`/posts?status=${tab}`} className="text-sm">
+            Clear
+          </Link>
+        )}
       </form>
 
-      {posts.length === 0 && <p className="text-sm text-muted">Nothing here yet.</p>}
-      <ul className="space-y-3">
-        {posts.map((post) => {
-          const ts = targets.filter((t) => t.postId === post.postId);
-          const first = post.content.parts[0];
-          return (
-            <li key={post.postId} className="card space-y-2">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="text-sm text-muted">
-                  {post.scheduledAt ? fmt.format(post.scheduledAt) : "No date"}
-                  {post.content.parts.length > 1 && ` · thread of ${post.content.parts.length}`}
-                  {first?.mediaIds.length ? ` · ${first.mediaIds.length} media` : ""}
-                  {postTags
-                    .filter((pt) => pt.postId === post.postId)
-                    .map((pt) => tagById.get(pt.tagId))
-                    .filter(Boolean)
-                    .map((t) => (
-                      <span key={t!.tagId} className="ml-2 rounded-full px-2 py-0.5 text-xs text-white" style={{ background: t!.color }}>
-                        {t!.name}
-                      </span>
-                    ))}
-                </div>
-                <PostActions postId={post.postId} status={post.status} />
-              </div>
-              <Link href={`/compose/${post.postId}`} className="block whitespace-pre-wrap break-words text-sm hover:underline">
-                {first?.text.slice(0, 400) || <span className="text-muted">(media only)</span>}
-              </Link>
-              {ts.length > 0 && (
-                <ul className="space-y-1 border-t border-border pt-2 text-xs">
-                  {ts.map((t) => {
-                    const a = accountById.get(t.socialAccountId);
-                    const info = a ? NETWORKS[a.network as NetworkId] : null;
-                    return (
-                      <li key={t.postTargetId} className="flex flex-wrap items-center gap-2">
-                        <span className="inline-block h-2 w-2 rounded-full" style={{ background: info?.color }} />
-                        <span className="font-medium">{a?.name ?? "deleted account"}</span>
-                        <span className="text-muted">{info?.label}</span>
-                        <span className={STATUS_STYLE[t.status]}>{t.status}</span>
-                        {t.url && (
-                          <a href={t.url} target="_blank" rel="noreferrer" className="text-accent underline">view</a>
-                        )}
-                        {t.error && <span className="w-full text-red-600">{t.error}</span>}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      {posts.length === 0 ? (
+        <p className="mt-6 text-muted">
+          {filtered ? "No posts match." : TABS[tab].empty}{" "}
+          {tab === "scheduled" && !filtered && <Link href="/compose">Write a post</Link>}
+        </p>
+      ) : (
+        <div className="mt-4">
+          {/* On phones each row stacks into a block instead of scrolling sideways. */}
+          <table className="data-table max-sm:block">
+            <thead className="max-sm:hidden">
+              <tr>
+                <th className="w-36">{tab === "scheduled" ? "When" : "Date"}</th>
+                <th>Post</th>
+                <th className="w-72">Accounts</th>
+                <th className="w-1">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="max-sm:block">
+              {posts.map((post) => {
+                const ts = targets.filter((t) => t.postId === post.postId);
+                const first = post.content.parts[0];
+                const attached = post.content.parts.flatMap((p) => p.mediaIds);
+                const videos = attached.filter((id) => isVideo.get(id)).length;
+                const images = attached.length - videos;
+                const mediaLabel = [images && plural(images, "image"), videos && plural(videos, "video")]
+                  .filter(Boolean)
+                  .join(", ");
+                const postTagList = postTags
+                  .filter((pt) => pt.postId === post.postId)
+                  .map((pt) => tagById.get(pt.tagId))
+                  .filter((t) => t !== undefined);
+                return (
+                  <tr key={post.postId} className="max-sm:block max-sm:border-b max-sm:border-line max-sm:py-2">
+                    <td className={`whitespace-nowrap max-sm:text-muted ${CELL}`}>
+                      {post.scheduledAt ? fmt.format(post.scheduledAt) : <span className="text-muted">No date</span>}
+                    </td>
+                    <td className={CELL}>
+                      <Link href={`/compose/${post.postId}`} className="line-clamp-2 text-fg">
+                        {first?.text || <span className="text-muted">(media only)</span>}
+                      </Link>
+                      {(post.content.parts.length > 1 || mediaLabel || postTagList.length > 0) && (
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted">
+                          {post.content.parts.length > 1 && <span>Thread of {post.content.parts.length}</span>}
+                          {mediaLabel && <span>{mediaLabel}</span>}
+                          {postTagList.map((t) => (
+                            <span key={t.tagId} className="inline-flex items-center gap-1">
+                              <span className="inline-block size-2 rounded-[1px]" style={{ background: t.color }} />
+                              {t.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                    <td className={CELL}>
+                      <ul className="space-y-1">
+                        {ts.map((t) => {
+                          const a = accountById.get(t.socialAccountId);
+                          const status = TARGET_STATUS[t.status];
+                          return (
+                            <li key={t.postTargetId}>
+                              {NETWORKS[a?.network as NetworkId]?.label ?? "Deleted account"}{" "}
+                              <span className="text-muted">{a?.name}</span>
+                              {status && <span className={`ml-1.5 ${status.className}`}>{status.label}</span>}
+                              {t.url && (
+                                <a href={t.url} target="_blank" rel="noreferrer" className="ml-1.5">
+                                  view
+                                </a>
+                              )}
+                              {t.error && (
+                                <p className="line-clamp-2 break-words text-xs text-danger" title={t.error}>
+                                  {t.error}
+                                </p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </td>
+                    <td className={CELL}>
+                      <PostActions postId={post.postId} status={post.status} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
