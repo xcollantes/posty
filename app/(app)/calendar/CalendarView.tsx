@@ -9,7 +9,8 @@ import { useRouter } from "next/navigation";
 import { calendarEvents, reschedulePost } from "@/app/actions/posts";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
 
-const MOVABLE = new Set(["draft", "scheduled", "failed"]);
+// Failed posts aren't movable: a drag can't re-queue them, use Retry instead.
+const MOVABLE = new Set(["draft", "scheduled"]);
 
 export function CalendarView() {
   const router = useRouter();
