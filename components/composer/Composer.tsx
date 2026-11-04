@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { duplicatePost, savePost, type SavePostInput } from "@/app/actions/posts";
@@ -7,7 +8,7 @@ import type { PostPart } from "@/lib/db/schema";
 import { maxCharsFor, NETWORKS, validatePart, type OptionField } from "@/lib/networks/catalog";
 import { extractUrls } from "@/lib/text";
 import { PartsEditor, type Counter } from "./PartsEditor";
-import { Avatar, Preview } from "./Preview";
+import { Preview } from "./Preview";
 import type {
   ComposerAccount,
   ComposerInitial,
@@ -22,8 +23,13 @@ type Props = {
   snippets: ComposerSnippet[];
   tags: ComposerTag[];
   initial: ComposerInitial;
-  hasQueue: boolean;
+  /** Next free queue slot (ISO), or null when the queue has no times. */
+  nextSlot: string | null;
+  /** The user's timezone, so server and browser format the slot the same way. */
+  timezone: string;
 };
+
+type When = "queue" | "time" | "now";
 
 /** ISO → value for <input type="datetime-local"> in the browser's timezone. */
 function toLocalInput(iso: string | null): string {
@@ -38,7 +44,7 @@ const defaultOptions = (acct: ComposerAccount) =>
     NETWORKS[acct.network].options.filter((f) => f.default).map((f) => [f.key, f.default!]),
   );
 
-export function Composer({ accounts, library, snippets, tags, initial, hasQueue }: Props) {
+export function Composer({ accounts, library, snippets, tags, initial, nextSlot, timezone }: Props) {
   const router = useRouter();
   const byId = useMemo(() => new Map(accounts.map((a) => [a.socialAccountId, a])), [accounts]);
   const readOnly = initial.status === "published" || initial.status === "partial";
@@ -59,8 +65,8 @@ export function Composer({ accounts, library, snippets, tags, initial, hasQueue 
     ),
   );
   const [tagIds, setTagIds] = useState<string[]>(initial.tagIds);
-  const [when, setWhen] = useState(toLocalInput(initial.scheduledAt));
-  const [tab, setTab] = useState<string>("original");
+  const [when, setWhen] = useState<When>(initial.scheduledAt ? "time" : nextSlot ? "queue" : "time");
+  const [time, setTime] = useState(toLocalInput(initial.scheduledAt));
   const [media, setMedia] = useState<Record<string, ComposerMedia>>(() =>
     Object.fromEntries(library.map((m) => [m.mediaId, m])),
   );
@@ -70,12 +76,9 @@ export function Composer({ accounts, library, snippets, tags, initial, hasQueue 
   const selectedAccounts = selected.map((id) => byId.get(id)!).filter(Boolean);
   const effective = (id: string) => overrides[id] ?? parts;
   const addMedia = (m: ComposerMedia) => setMedia((all) => ({ ...all, [m.mediaId]: m }));
+  const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
-  const toggle = (id: string) => {
-    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
-    if (tab === id) setTab("original");
-  };
-
+  /** One counter per network (and per limit, e.g. two Mastodon instances). */
   const counterFor = (accts: ComposerAccount[]) => (text: string): Counter[] => {
     const seen = new Set<string>();
     return accts.flatMap((a) => {
@@ -84,7 +87,7 @@ export function Composer({ accounts, library, snippets, tags, initial, hasQueue 
       const key = `${a.network}:${max}`;
       if (seen.has(key)) return [];
       seen.add(key);
-      return [{ label: info.label, count: info.count(text, a.meta), max, color: info.color }];
+      return [{ label: info.label, count: info.count(text, a.meta), max }];
     });
   };
 
@@ -103,20 +106,27 @@ export function Composer({ accounts, library, snippets, tags, initial, hasQueue 
       }),
     ),
   ];
-
-  const warnings = [...new Set(selectedAccounts.map((a) => NETWORKS[a.network].warning).filter(Boolean))] as string[];
-  const xHasLink = selectedAccounts.some(
-    (a) => a.network === "x" && effective(a.socialAccountId).some((p) => extractUrls(p.text).length > 0),
-  );
-  if (xHasLink) {
-    warnings.unshift("This X post contains a link, which costs about $0.20 instead of $0.015.");
+  const notes = [...new Set(selectedAccounts.map((a) => NETWORKS[a.network].warning).filter(Boolean))] as string[];
+  if (
+    selectedAccounts.some(
+      (a) => a.network === "x" && effective(a.socialAccountId).some((p) => extractUrls(p.text).length > 0),
+    )
+  ) {
+    notes.unshift("This X post has a link, so it costs about $0.20 instead of $0.015.");
   }
   const reconnect = selectedAccounts.filter((a) => a.needsReconnect);
 
-  function submit(mode: SavePostInput["mode"]) {
+  function submit(asDraft: boolean) {
     setError(null);
-    if (mode === "schedule" && !when) {
-      setError("Pick a date and time");
+    const mode: SavePostInput["mode"] = asDraft
+      ? "draft"
+      : when === "queue"
+        ? "queue"
+        : when === "now"
+          ? "now"
+          : "schedule";
+    if (mode === "schedule" && !time) {
+      setError("Pick a date and time.");
       return;
     }
     const input: SavePostInput = {
@@ -129,7 +139,7 @@ export function Composer({ accounts, library, snippets, tags, initial, hasQueue 
       })),
       tagIds,
       mode,
-      scheduledAt: when ? new Date(when).toISOString() : null,
+      scheduledAt: when === "time" && time ? new Date(time).toISOString() : null,
     };
     startTransition(async () => {
       const res = await savePost(input);
@@ -140,10 +150,11 @@ export function Composer({ accounts, library, snippets, tags, initial, hasQueue 
 
   if (readOnly) {
     return (
-      <div className="card space-y-3">
-        <p>This post already went out, so it can&apos;t be edited.</p>
+      <div className="max-w-2xl">
+        <p>This post has already gone out, so it can&apos;t be edited. You can copy it into a new draft.</p>
         <button
-          className="btn-primary"
+          className="btn-primary mt-3"
+          disabled={pending}
           onClick={() =>
             startTransition(async () => {
               const id = await duplicatePost(initial.postId!);
@@ -151,208 +162,249 @@ export function Composer({ accounts, library, snippets, tags, initial, hasQueue 
             })
           }
         >
-          Duplicate as new draft
+          Duplicate as draft
         </button>
+        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+          {selectedAccounts.map((a) => (
+            <Preview key={a.socialAccountId} account={a} parts={effective(a.socialAccountId)} media={media} />
+          ))}
+        </div>
       </div>
     );
   }
 
-  const tabAccount = tab === "original" ? null : byId.get(tab);
+  const goLabel = when === "queue" ? "Add to queue" : when === "now" ? "Post now" : "Schedule";
+  const slotLabel = nextSlot
+    ? new Intl.DateTimeFormat("en", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: timezone,
+      }).format(new Date(nextSlot))
+    : "";
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="space-y-4">
-        {/* Account picker */}
-        <section aria-label="Accounts" className="flex flex-wrap gap-2">
-          {accounts.length === 0 && (
-            <p className="text-sm text-muted">
-              No accounts yet. <a href="/accounts" className="underline">Connect one</a> to start posting.
+    <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="min-w-0 space-y-8">
+        <section>
+          <h2 className="mb-2">Post to</h2>
+          {accounts.length === 0 ? (
+            <p className="text-muted">
+              No accounts connected yet. <Link href="/accounts">Connect one</Link> first.
             </p>
+          ) : (
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+              {accounts.map((a) => (
+                <label key={a.socialAccountId} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(a.socialAccountId)}
+                    onChange={() => toggle(a.socialAccountId)}
+                  />
+                  {NETWORKS[a.network].label}
+                  <span className="text-muted">{a.name}</span>
+                  {a.needsReconnect && <span className="text-danger">(reconnect)</span>}
+                </label>
+              ))}
+            </div>
           )}
-          {accounts.map((a) => {
-            const on = selected.includes(a.socialAccountId);
-            return (
-              <button
-                key={a.socialAccountId}
-                type="button"
-                onClick={() => toggle(a.socialAccountId)}
-                aria-pressed={on}
-                title={`${a.name} (${NETWORKS[a.network].label})`}
-                className={`flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 text-sm transition ${on ? "border-accent bg-accent/10" : "border-border opacity-60 hover:opacity-100"}`}
-              >
-                <Avatar account={a} size={24} />
-                <span className="max-w-32 truncate">{a.name}</span>
-              </button>
-            );
-          })}
         </section>
 
-        {/* Tabs: original + per-account customization */}
+        <PartsEditor
+          parts={parts}
+          update={(fn) => setParts(fn)}
+          allowThread={selectedAccounts.length > 0 && selectedAccounts.every((a) => NETWORKS[a.network].threads)}
+          media={media}
+          onMedia={addMedia}
+          library={library}
+          snippets={snippets}
+          counters={counterFor(selectedAccounts.filter((a) => !overrides[a.socialAccountId]))}
+        />
+
         {selectedAccounts.length > 0 && (
-          <div className="flex flex-wrap gap-1 border-b border-border text-sm">
-            {[{ id: "original", label: "Original" }, ...selectedAccounts.map((a) => ({ id: a.socialAccountId, label: `${NETWORKS[a.network].label}: ${a.name}` }))].map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={`-mb-px border-b-2 px-3 py-1.5 ${tab === t.id ? "border-accent font-medium" : "border-transparent text-muted"}`}
-              >
-                {t.label}
-                {t.id !== "original" && overrides[t.id] ? " ✎" : ""}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {!tabAccount ? (
-          <PartsEditor
-            parts={parts}
-            update={(fn) => setParts(fn)}
-            allowThread={selectedAccounts.length > 0 && selectedAccounts.every((a) => NETWORKS[a.network].threads)}
-            media={media}
-            onMedia={addMedia}
-            library={library}
-            snippets={snippets}
-            counters={counterFor(selectedAccounts.filter((a) => !overrides[a.socialAccountId]))}
-          />
-        ) : (
-          <div className="space-y-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!overrides[tabAccount.socialAccountId]}
-                onChange={(e) =>
-                  setOverrides((o) => ({
-                    ...o,
-                    [tabAccount.socialAccountId]: e.target.checked ? structuredClone(parts) : null,
-                  }))
-                }
-              />
-              Customize the text and media for {tabAccount.name}
-            </label>
-            {overrides[tabAccount.socialAccountId] && (
-              <PartsEditor
-                parts={overrides[tabAccount.socialAccountId]!}
-                update={(fn) =>
-                  setOverrides((o) => ({ ...o, [tabAccount.socialAccountId]: fn(o[tabAccount.socialAccountId] ?? parts) }))
-                }
-                allowThread={NETWORKS[tabAccount.network].threads}
-                media={media}
-                onMedia={addMedia}
-                library={library}
-                snippets={snippets}
-                counters={counterFor([tabAccount])}
-              />
-            )}
-            <OptionsPanel
-              account={tabAccount}
-              values={options[tabAccount.socialAccountId] ?? {}}
-              onChange={(key, value) =>
-                setOptions((o) => ({ ...o, [tabAccount.socialAccountId]: { ...o[tabAccount.socialAccountId], [key]: value } }))
-              }
-            />
-          </div>
-        )}
-
-        {/* Network-specific options that must be filled in */}
-        {tab === "original" && selectedAccounts.some((a) => NETWORKS[a.network].options.some((f) => f.required)) && (
-          <p className="text-xs text-muted">
-            Some networks need extra details (board, title…). Open their tab above to fill them in.
-          </p>
-        )}
-
-        {tags.length > 0 && (
-          <section aria-label="Tags" className="flex flex-wrap items-center gap-2">
-            <span className="label mb-0">Tags</span>
-            {tags.map((t) => {
-              const on = tagIds.includes(t.tagId);
-              return (
-                <button
-                  key={t.tagId}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setTagIds((ids) => (on ? ids.filter((x) => x !== t.tagId) : [...ids, t.tagId]))}
-                  className={`rounded-full border px-2.5 py-0.5 text-xs ${on ? "text-white" : ""}`}
-                  style={on ? { background: t.color, borderColor: t.color } : { borderColor: t.color, color: t.color }}
+          <section>
+            <h2>Per account</h2>
+            <p className="hint mb-2">Change the text for one account, or set its options.</p>
+            <div className="border-t border-line">
+              {selectedAccounts.map((a) => (
+                <AccountPanel
+                  key={a.socialAccountId}
+                  account={a}
+                  custom={!!overrides[a.socialAccountId]}
+                  onCustom={(on) =>
+                    setOverrides((o) => ({ ...o, [a.socialAccountId]: on ? structuredClone(parts) : null }))
+                  }
+                  values={options[a.socialAccountId] ?? {}}
+                  onOption={(key, value) =>
+                    setOptions((o) => ({ ...o, [a.socialAccountId]: { ...o[a.socialAccountId], [key]: value } }))
+                  }
                 >
-                  {t.name}
-                </button>
-              );
-            })}
+                  {overrides[a.socialAccountId] && (
+                    <PartsEditor
+                      parts={overrides[a.socialAccountId]!}
+                      update={(fn) =>
+                        setOverrides((o) => ({ ...o, [a.socialAccountId]: fn(o[a.socialAccountId] ?? parts) }))
+                      }
+                      allowThread={NETWORKS[a.network].threads}
+                      media={media}
+                      onMedia={addMedia}
+                      library={library}
+                      snippets={snippets}
+                      counters={counterFor([a])}
+                    />
+                  )}
+                </AccountPanel>
+              ))}
+            </div>
           </section>
         )}
 
-        {(warnings.length > 0 || reconnect.length > 0) && (
-          <ul className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            {reconnect.map((a) => (
-              <li key={a.socialAccountId}>⚠ {a.name} needs reconnecting before it can post.</li>
-            ))}
-            {warnings.map((w) => (
-              <li key={w}>ⓘ {w}</li>
-            ))}
-          </ul>
+        {tags.length > 0 && (
+          <section>
+            <h2 className="mb-2">Tags</h2>
+            <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+              {tags.map((t) => (
+                <label key={t.tagId} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={tagIds.includes(t.tagId)}
+                    onChange={() =>
+                      setTagIds((ids) => (ids.includes(t.tagId) ? ids.filter((x) => x !== t.tagId) : [...ids, t.tagId]))
+                    }
+                  />
+                  <span className="inline-block size-2.5 rounded-[2px]" style={{ background: t.color }} />
+                  {t.name}
+                </label>
+              ))}
+            </div>
+          </section>
         )}
 
-        {errors.length > 0 && selected.length > 0 && (
-          <ul className="space-y-0.5 text-sm text-red-600" aria-live="polite">
-            {errors.map((e) => (
-              <li key={e}>• {e}</li>
-            ))}
-          </ul>
-        )}
-        {error && <p role="alert" className="whitespace-pre-line text-sm text-red-600">{error}</p>}
-
-        {/* Actions */}
-        <div className="flex flex-wrap items-end gap-2 border-t border-border pt-4">
-          <div>
-            <label className="label" htmlFor="when">Date &amp; time</label>
-            <input id="when" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="input" />
+        <section>
+          <h2 className="mb-2">When</h2>
+          <div className="space-y-2 text-sm">
+            {nextSlot && (
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="radio" name="when" checked={when === "queue"} onChange={() => setWhen("queue")} />
+                Next queue slot <span className="text-muted">{slotLabel}</span>
+              </label>
+            )}
+            <label className="flex cursor-pointer flex-wrap items-center gap-2">
+              <input type="radio" name="when" checked={when === "time"} onChange={() => setWhen("time")} />
+              On
+              <input
+                type="datetime-local"
+                aria-label="Date and time"
+                className="input w-auto py-0.5"
+                value={time}
+                onChange={(e) => {
+                  setTime(e.target.value);
+                  setWhen("time");
+                }}
+              />
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input type="radio" name="when" checked={when === "now"} onChange={() => setWhen("now")} />
+              Now
+            </label>
           </div>
-          <button type="button" className="btn" disabled={pending} onClick={() => submit("draft")}>Save draft</button>
-          {hasQueue && (
-            <button type="button" className="btn" disabled={pending || errors.length > 0} onClick={() => submit("queue")}>
-              Add to queue
-            </button>
+        </section>
+
+        {(errors.length > 0 || reconnect.length > 0 || notes.length > 0) && selected.length > 0 && (
+          <div className="space-y-1 text-sm" aria-live="polite">
+            {errors.map((e) => (
+              <p key={e} className="text-danger">
+                {e}
+              </p>
+            ))}
+            {reconnect.map((a) => (
+              <p key={a.socialAccountId} className="text-danger">
+                {a.name} ({NETWORKS[a.network].label}) needs to be reconnected before it can post.
+              </p>
+            ))}
+            {notes.map((n) => (
+              <p key={n} className="text-muted">
+                {n}
+              </p>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={pending || selected.length === 0 || errors.length > 0}
+            onClick={() => submit(false)}
+          >
+            {pending ? "Saving…" : goLabel}
+          </button>
+          <button type="button" className="btn" disabled={pending} onClick={() => submit(true)}>
+            Save as draft
+          </button>
+          {error && (
+            <p role="alert" className="whitespace-pre-line text-sm text-danger">
+              {error}
+            </p>
           )}
-          <button type="button" className="btn" disabled={pending || errors.length > 0 || !when} onClick={() => submit("schedule")}>
-            Schedule
-          </button>
-          <button type="button" className="btn-primary" disabled={pending || errors.length > 0} onClick={() => submit("now")}>
-            {pending ? "Saving…" : "Post now"}
-          </button>
         </div>
       </div>
 
-      {/* Previews */}
-      <aside className="space-y-3" aria-label="Previews">
-        <h2 className="label">Preview</h2>
-        {selectedAccounts.length === 0 && <p className="text-sm text-muted">Select an account to see a preview.</p>}
-        {selectedAccounts.map((a) => (
-          <Preview key={a.socialAccountId} account={a} parts={effective(a.socialAccountId)} media={media} />
-        ))}
+      <aside className="min-w-0 lg:sticky lg:top-6 lg:self-start">
+        <h2 className="mb-2">Preview</h2>
+        {selectedAccounts.length === 0 ? (
+          <p className="hint">Pick an account to see the post as it will look there.</p>
+        ) : (
+          <div className="space-y-4">
+            {selectedAccounts.map((a) => (
+              <Preview key={a.socialAccountId} account={a} parts={effective(a.socialAccountId)} media={media} />
+            ))}
+          </div>
+        )}
       </aside>
     </div>
   );
 }
 
-function OptionsPanel({
+function AccountPanel({
   account,
+  custom,
+  onCustom,
   values,
-  onChange,
+  onOption,
+  children,
 }: {
   account: ComposerAccount;
+  custom: boolean;
+  onCustom: (on: boolean) => void;
   values: Record<string, string>;
-  onChange: (key: string, value: string) => void;
+  onOption: (key: string, value: string) => void;
+  children: React.ReactNode;
 }) {
-  const fields = NETWORKS[account.network].options;
-  if (!fields.length) return null;
+  const info = NETWORKS[account.network];
+  const missing = info.options.some((f) => f.required && !values[f.key]?.trim());
+  // Open by default when something needs filling in; afterwards only the user toggles it.
+  const [open, setOpen] = useState(missing || custom);
   return (
-    <section className="card space-y-3" aria-label={`${NETWORKS[account.network].label} options`}>
-      <h3 className="text-sm font-medium">{NETWORKS[account.network].label} options</h3>
-      {fields.map((f) => (
-        <OptionInput key={f.key} field={f} account={account} value={values[f.key] ?? ""} onChange={(v) => onChange(f.key, v)} />
-      ))}
-    </section>
+    <details className="border-b border-line py-2" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="cursor-pointer text-sm">
+        {info.label} <span className="text-muted">{account.name}</span>
+        {custom && <span className="text-muted"> · own text</span>}
+        {missing && <span className="text-danger"> · needs details</span>}
+      </summary>
+      <div className="mb-2 mt-3 space-y-4 pl-4">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" checked={custom} onChange={(e) => onCustom(e.target.checked)} />
+          Use different text and media for this account
+        </label>
+        {children}
+        {info.options.map((f) => (
+          <OptionInput key={f.key} field={f} account={account} value={values[f.key] ?? ""} onChange={(v) => onOption(f.key, v)} />
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -372,28 +424,32 @@ function OptionInput({
     ? ((account.meta[field.choicesFromMeta] as { value: string; label: string }[] | undefined) ?? [])
     : (field.choices ?? []);
   return (
-    <div>
-      <label className="label" htmlFor={id}>
+    <div className="max-w-md text-sm">
+      <label htmlFor={id} className="mb-1 block">
         {field.label}
-        {field.required ? " *" : ""}
+        {field.required && <span className="text-muted"> (required)</span>}
       </label>
       {field.type === "select" ? (
         <select id={id} className="input" value={value} onChange={(e) => onChange(e.target.value)}>
           {!field.default && <option value="">Choose…</option>}
           {choices.map((c) => (
-            <option key={c.value} value={c.value}>{c.label}</option>
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
           ))}
         </select>
       ) : field.type === "textarea" ? (
-        <textarea id={id} className="input" rows={3} value={value} onChange={(e) => onChange(e.target.value)} />
+        <textarea id={id} className="input" rows={2} value={value} onChange={(e) => onChange(e.target.value)} />
       ) : field.type === "checkbox" ? (
         <input id={id} type="checkbox" checked={value === "true"} onChange={(e) => onChange(String(e.target.checked))} />
       ) : (
         <input id={id} className="input" value={value} onChange={(e) => onChange(e.target.value)} />
       )}
-      {field.help && <p className="mt-1 text-xs text-muted">{field.help}</p>}
+      {field.help && <p className="hint mt-1">{field.help}</p>}
       {field.choicesFromMeta && choices.length === 0 && (
-        <p className="mt-1 text-xs text-amber-600">No {field.label.toLowerCase()}s found. Refresh the account on the Accounts page.</p>
+        <p className="mt-1 text-danger">
+          No {field.label.toLowerCase()}s found. Use Refresh on the Accounts page.
+        </p>
       )}
     </div>
   );

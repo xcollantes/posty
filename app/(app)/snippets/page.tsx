@@ -1,52 +1,67 @@
+import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
 import { createSnippet, deleteSnippet } from "@/app/actions/library";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 
+export const metadata: Metadata = { title: "Snippets" };
+
 export default async function SnippetsPage() {
   await requireUser();
   const snippets = await db.select().from(schema.snippets).orderBy(asc(schema.snippets.kind), asc(schema.snippets.name));
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-      <section className="space-y-3">
-        <h1 className="text-xl font-semibold">Snippets</h1>
-        <p className="text-sm text-muted">Hashtag groups and templates you can insert from the composer.</p>
-        {snippets.length === 0 && <p className="text-sm text-muted">No snippets yet.</p>}
-        <ul className="space-y-2">
-          {snippets.map((s) => (
-            <li key={s.snippetId} className="card flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">
-                  {s.kind === "hashtags" ? "#" : "📝"} {s.name}
-                </div>
-                <p className="whitespace-pre-wrap break-words text-sm text-muted">{s.body}</p>
-              </div>
-              <ActionButton action={deleteSnippet.bind(null, s.snippetId)} label="Delete" />
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="card h-fit">
-        <h2 className="mb-3 font-medium">New snippet</h2>
-        <ActionForm action={createSnippet}>
-          <div>
-            <label className="label" htmlFor="kind">Type</label>
-            <select id="kind" name="kind" className="input">
-              <option value="hashtags">Hashtag group</option>
-              <option value="template">Template</option>
-            </select>
-          </div>
-          <div>
-            <label className="label" htmlFor="name">Name</label>
-            <input id="name" name="name" className="input" required />
-          </div>
-          <div>
-            <label className="label" htmlFor="body">Text</label>
-            <textarea id="body" name="body" rows={5} className="input" required placeholder="#selfhosted #opensource" />
-          </div>
-        </ActionForm>
-      </section>
+    <div className="max-w-3xl">
+      <h1>Snippets</h1>
+      <p className="hint mt-1">Hashtag groups and templates you can drop into a post from the composer.</p>
+
+      {snippets.length === 0 ? (
+        <p className="mt-6 text-muted">No snippets yet.</p>
+      ) : (
+        <table className="data-table mt-4">
+          <thead>
+            <tr>
+              <th className="w-40">Name</th>
+              <th className="w-24">Type</th>
+              <th>Text</th>
+              <th className="w-1">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {snippets.map((s) => (
+              <tr key={s.snippetId}>
+                <td>{s.name}</td>
+                <td className="text-muted">{s.kind === "hashtags" ? "Hashtags" : "Template"}</td>
+                <td className="whitespace-pre-wrap break-words">{s.body}</td>
+                <td>
+                  <ActionButton action={deleteSnippet.bind(null, s.snippetId)} label="Delete" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h2 className="mt-8">Add a snippet</h2>
+      <ActionForm action={createSnippet} submitLabel="Add snippet" className="mt-2 max-w-md space-y-3">
+        <label className="block text-sm">
+          Name
+          <input name="name" className="input mt-1" required />
+        </label>
+        <label className="block text-sm">
+          Type
+          <select name="kind" className="input mt-1">
+            <option value="hashtags">Hashtags</option>
+            <option value="template">Template</option>
+          </select>
+        </label>
+        <label className="block text-sm">
+          Text
+          <textarea name="body" rows={4} className="input mt-1" required placeholder="#coffee #specialtycoffee" />
+        </label>
+      </ActionForm>
     </div>
   );
 }

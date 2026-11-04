@@ -32,7 +32,6 @@ export type OptionField = {
 export type NetworkInfo = {
   id: NetworkId;
   label: string;
-  color: string;
   maxChars: number;
   /** Character count as the network sees it. `meta` is the account's meta. */
   count: (text: string, meta?: Record<string, unknown>) => number;
@@ -62,7 +61,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   facebook: {
     id: "facebook",
     label: "Facebook Page",
-    color: "#1877f2",
     maxChars: 63206,
     count: codePoints,
     maxImages: 10,
@@ -91,7 +89,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   instagram: {
     id: "instagram",
     label: "Instagram",
-    color: "#e1306c",
     maxChars: 2200,
     count: codePoints,
     maxImages: 20,
@@ -121,7 +118,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   threads: {
     id: "threads",
     label: "Threads",
-    color: "#000000",
     maxChars: 500,
     count: threadsCount,
     maxImages: 20,
@@ -137,7 +133,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   x: {
     id: "x",
     label: "X",
-    color: "#0f1419",
     maxChars: 280,
     count: (text, meta) => {
       const premium = meta?.subscriptionType && meta.subscriptionType !== "None";
@@ -158,7 +153,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   linkedin: {
     id: "linkedin",
     label: "LinkedIn",
-    color: "#0a66c2",
     maxChars: 3000,
     count: codePoints,
     maxImages: 20,
@@ -175,7 +169,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   pinterest: {
     id: "pinterest",
     label: "Pinterest",
-    color: "#e60023",
     maxChars: 800,
     count: codePoints,
     maxImages: 5,
@@ -196,7 +189,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   youtube: {
     id: "youtube",
     label: "YouTube",
-    color: "#ff0000",
     maxChars: 5000,
     count: utf8Bytes,
     maxImages: 0,
@@ -225,7 +217,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   tiktok: {
     id: "tiktok",
     label: "TikTok",
-    color: "#010101",
     maxChars: 2200,
     count: codePoints,
     maxImages: 0,
@@ -265,7 +256,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   bluesky: {
     id: "bluesky",
     label: "Bluesky",
-    color: "#1185fe",
     maxChars: 300,
     count: graphemes,
     maxImages: 4,
@@ -281,7 +271,6 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
   mastodon: {
     id: "mastodon",
     label: "Mastodon",
-    color: "#6364ff",
     maxChars: 500,
     count: (text) => countWithUrls(text, 23),
     maxImages: 4,

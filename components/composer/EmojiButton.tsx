@@ -28,10 +28,10 @@ export function EmojiButton({ onPick }: { onPick: (emoji: string) => void }) {
 
   return (
     <div className="relative">
-      <button type="button" className="btn px-2" aria-label="Insert emoji" onClick={() => setOpen((o) => !o)}>
-        😊
+      <button type="button" className="link-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        Emoji
       </button>
-      {open && <div ref={holder} className="absolute left-0 top-full z-30 mt-1 shadow-lg" />}
+      {open && <div ref={holder} className="absolute left-0 top-full z-30 mt-1 border border-line" />}
     </div>
   );
 }

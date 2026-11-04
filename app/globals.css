@@ -1,77 +1,165 @@
 @import "tailwindcss";
 
+/*
+ * Posty's look: a plain, dense tool. System fonts, neutral grays, one link
+ * color, hairline rules instead of boxes, words instead of icons.
+ */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --panel: #ffffff;
-  --border: #e2e8f0;
-  --muted: #64748b;
-  --accent: #0284c7;
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1d1d1b;
+  --muted: #6d6d69;
+  --line: #e3e2de;
+  --soft: #f5f4f1;
+  --link: #1a52c9;
+  --danger: #b42318;
+  --ok: #1f7a3d;
+  --warn-bg: #fbf0c9;
+  --warn-fg: #5b4300;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b1120;
-    --foreground: #e2e8f0;
-    --panel: #111827;
-    --border: #1f2937;
-    --muted: #94a3b8;
-    --accent: #38bdf8;
+    --bg: #171717;
+    --fg: #e7e6e3;
+    --muted: #9b9a96;
+    --line: #2d2d2b;
+    --soft: #212120;
+    --link: #8fb1ff;
+    --danger: #ff8c82;
+    --ok: #74d18f;
+    --warn-bg: #332a0e;
+    --warn-fg: #f0d58c;
   }
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-panel: var(--panel);
-  --color-border: var(--border);
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
   --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-line: var(--line);
+  --color-soft: var(--soft);
+  --color-link: var(--link);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-fg: var(--warn-fg);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+/* In the base layer so utilities (text-muted on a link, etc.) still win. */
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--fg);
+    accent-color: var(--fg);
+  }
+  body {
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  a {
+    color: var(--link);
+    text-underline-offset: 2px;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  h1 {
+    font-size: 1.3rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 1rem;
+    font-weight: 600;
+  }
 }
 
-/* Shared form controls (in the components layer so utilities like md:hidden win) */
 @layer components {
-.input {
-  @apply w-full rounded-md border border-border bg-panel px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/40;
-}
-.btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-sm font-medium hover:bg-background disabled:opacity-50 cursor-pointer;
-}
-.btn-primary {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 cursor-pointer;
-}
-.btn-danger {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950 cursor-pointer;
-}
-.card {
-  @apply rounded-lg border border-border bg-panel p-4;
-}
-.label {
-  @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;
+  .btn {
+    @apply inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-[3px] border border-line bg-bg px-2.5 py-[3px] text-sm text-fg hover:bg-soft hover:no-underline disabled:cursor-default disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply inline-flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-[3px] border border-fg bg-fg px-2.5 py-[3px] text-sm text-bg hover:no-underline hover:opacity-85 disabled:cursor-default disabled:opacity-40;
+  }
+  /* Secondary actions are plain words. */
+  .link-btn {
+    @apply cursor-pointer text-link hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-50;
+  }
+  .danger-btn {
+    @apply cursor-pointer text-danger hover:underline disabled:cursor-default disabled:opacity-50;
+  }
+  .input {
+    @apply w-full rounded-[3px] border border-line bg-bg px-2 py-1 text-fg placeholder:text-muted;
+  }
+  .input:focus {
+    outline: 2px solid var(--link);
+    outline-offset: -1px;
+  }
+  .hint {
+    @apply text-sm text-muted;
+  }
+  .data-table {
+    @apply w-full border-collapse text-sm;
+  }
+  .data-table th {
+    @apply border-b border-line py-1.5 pr-4 text-left align-bottom font-normal text-muted;
+  }
+  .data-table td {
+    @apply border-b border-line py-2 pr-4 align-top;
+  }
 }
 
-}
-
-/* FullCalendar tweaks */
+/* FullCalendar injects its own unlayered CSS, so these need !important. */
 .fc {
-  --fc-border-color: var(--border);
-  --fc-page-bg-color: var(--panel);
-  --fc-today-bg-color: color-mix(in srgb, var(--accent) 8%, transparent);
-  font-size: 0.85rem;
+  --fc-border-color: var(--line);
+  --fc-page-bg-color: var(--bg);
+  --fc-neutral-bg-color: var(--soft);
+  --fc-today-bg-color: var(--soft);
+  --fc-now-indicator-color: var(--danger);
+  font-size: 14px;
+}
+.fc .fc-toolbar-title {
+  font-size: 1.05rem;
+  font-weight: 600;
 }
 .fc .fc-button {
-  @apply !bg-panel !text-foreground !border-border !shadow-none text-sm capitalize;
+  background: var(--bg) !important;
+  color: var(--fg) !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  font-size: 13px;
+  padding: 2px 10px;
+  text-transform: none;
+}
+.fc .fc-button:hover {
+  background: var(--soft) !important;
 }
 .fc .fc-button-active {
-  @apply !bg-accent !text-white;
+  background: var(--soft) !important;
+  font-weight: 600;
 }
-.fc-event {
+.fc .fc-col-header-cell-cushion,
+.fc .fc-daygrid-day-number {
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: none;
+}
+.fc .fc-event {
   cursor: pointer;
+}
+.fc .fc-daygrid-event {
+  white-space: nowrap;
+}
+.fc .fc-daygrid-event:hover {
+  background: var(--soft) !important;
+}
+/* In week view events sit on the grid, so give them a light block. */
+.fc .fc-timegrid-event {
+  background: var(--soft) !important;
+  border: 1px solid var(--line) !important;
+  padding: 1px 3px;
 }

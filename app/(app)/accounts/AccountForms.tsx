@@ -5,54 +5,63 @@ import { connectWithForm, disconnectAccount, refreshAccount, setAccountActive } 
 
 type Field = { name: string; label: string; type?: string; placeholder?: string; help?: string };
 
-/** Connect networks that use a credential form (Bluesky app password). */
+/** Networks that connect with a credential form (Bluesky app password). */
 export function FormConnect({ network, fields }: { network: string; fields: Field[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   return (
-    <form
-      className="space-y-2"
-      action={(form) =>
-        start(async () => {
-          setError(null);
-          const values = Object.fromEntries(fields.map((f) => [f.name, String(form.get(f.name) ?? "")]));
-          const res = await connectWithForm(network, values);
-          if (res.error) setError(res.error);
-        })
-      }
-    >
-      {fields.map((f) => (
-        <div key={f.name}>
-          <label className="label" htmlFor={`${network}-${f.name}`}>{f.label}</label>
-          <input
-            id={`${network}-${f.name}`}
-            name={f.name}
-            type={f.type ?? "text"}
-            placeholder={f.placeholder}
-            className="input"
-            autoComplete="off"
-            required={!f.label.includes("optional")}
-          />
-          {f.help && <p className="mt-1 text-xs text-muted">{f.help}</p>}
-        </div>
-      ))}
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <button className="btn-primary" disabled={pending}>{pending ? "Connecting…" : "Connect"}</button>
-    </form>
+    <div>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        action={(form) =>
+          start(async () => {
+            setError(null);
+            const values = Object.fromEntries(fields.map((f) => [f.name, String(form.get(f.name) ?? "")]));
+            const res = await connectWithForm(network, values);
+            if (res.error) setError(res.error);
+          })
+        }
+      >
+        {fields.map((f) => (
+          <label key={f.name} className="text-sm">
+            {f.label}
+            <input
+              name={f.name}
+              type={f.type ?? "text"}
+              placeholder={f.placeholder}
+              className="input mt-1 w-48"
+              autoComplete="off"
+              required={!f.label.includes("optional")}
+            />
+          </label>
+        ))}
+        <button className="btn" disabled={pending}>
+          {pending ? "Connecting…" : "Connect"}
+        </button>
+      </form>
+      {fields
+        .filter((f) => f.help)
+        .map((f) => (
+          <p key={f.name} className="hint mt-1">
+            {f.help}
+          </p>
+        ))}
+      {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+    </div>
   );
 }
 
 /** OAuth networks that need input first (Mastodon instance). */
 export function OAuthPreForm({ network, fields }: { network: string; fields: Field[] }) {
   return (
-    <form method="GET" action={`/api/connect/${network}/start`} className="space-y-2">
+    <form method="GET" action={`/api/connect/${network}/start`} className="flex flex-wrap items-end gap-2">
       {fields.map((f) => (
-        <div key={f.name}>
-          <label className="label" htmlFor={`${network}-${f.name}`}>{f.label}</label>
-          <input id={`${network}-${f.name}`} name={f.name} placeholder={f.placeholder} className="input" required />
-        </div>
+        <label key={f.name} className="text-sm">
+          {f.label}
+          <input name={f.name} placeholder={f.placeholder} className="input mt-1 w-56" required />
+        </label>
       ))}
-      <button className="btn-primary">Connect</button>
+      <button className="btn">Connect</button>
     </form>
   );
 }
@@ -69,35 +78,37 @@ export function AccountRowActions({
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {message && <span className="text-xs text-red-600">{message}</span>}
-      <button
-        className="btn"
-        disabled={pending}
-        onClick={() =>
-          start(async () => {
-            const res = await refreshAccount(socialAccountId);
-            setMessage(res.error ?? null);
-          })
-        }
-      >
-        Refresh
-      </button>
-      {reconnectHref && <a href={reconnectHref} className="btn">Reconnect</a>}
-      <button className="btn" disabled={pending} onClick={() => start(() => setAccountActive(socialAccountId, !isActive))}>
-        {isActive ? "Pause" : "Resume"}
-      </button>
-      <button
-        className="btn-danger"
-        disabled={pending}
-        onClick={() => {
-          if (window.confirm("Disconnect this account? Its scheduled posts to this account are removed.")) {
-            start(() => disconnectAccount(socialAccountId));
+    <div className="whitespace-nowrap">
+      <div className="flex gap-3">
+        <button
+          className="link-btn"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const res = await refreshAccount(socialAccountId);
+              setMessage(res.error ?? null);
+            })
           }
-        }}
-      >
-        Disconnect
-      </button>
+        >
+          Refresh
+        </button>
+        {reconnectHref && <a href={reconnectHref}>Reconnect</a>}
+        <button className="link-btn" disabled={pending} onClick={() => start(() => setAccountActive(socialAccountId, !isActive))}>
+          {isActive ? "Pause" : "Resume"}
+        </button>
+        <button
+          className="danger-btn"
+          disabled={pending}
+          onClick={() => {
+            if (window.confirm("Disconnect this account? Its scheduled posts to this account are removed.")) {
+              start(() => disconnectAccount(socialAccountId));
+            }
+          }}
+        >
+          Disconnect
+        </button>
+      </div>
+      {message && <p className="mt-1 max-w-xs whitespace-normal text-xs text-danger">{message}</p>}
     </div>
   );
 }

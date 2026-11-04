@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   ["/calendar", "Calendar"],
   ["/posts", "Posts"],
-  ["/accounts", "Accounts"],
-  ["/media-library", "Media"],
   ["/queue", "Queue"],
+  ["/media-library", "Media"],
+  ["/accounts", "Accounts"],
   ["/snippets", "Snippets"],
   ["/tags", "Tags"],
   ["/analytics", "Analytics"],
@@ -18,13 +18,13 @@ const LINKS = [
 export function Nav() {
   const path = usePathname();
   return (
-    <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:overflow-visible">
+    <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
       {LINKS.map(([href, label]) => (
         <Link
           key={href}
           href={href}
           aria-current={path.startsWith(href) ? "page" : undefined}
-          className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm hover:bg-background aria-[current=page]:bg-accent/10 aria-[current=page]:font-medium aria-[current=page]:text-accent"
+          className="text-muted hover:text-fg hover:no-underline aria-[current=page]:font-medium aria-[current=page]:text-fg"
         >
           {label}
         </Link>
