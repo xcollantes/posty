@@ -48,14 +48,11 @@ needed.
 
 Notes:
 
-- Images are fetched from `PUBLIC_MEDIA_URL`, so Funnel must work. Posty
-  converts images to JPEG.
+- Media is fetched by URL from the GCS bucket (`GCS_BUCKET`, see the
+  README), as it is for Threads and Facebook video. Posty converts images
+  to JPEG.
 - Feed images must be between 4:5 and 1.91:1.
 - Tokens last 60 days; the worker extends them weekly.
-- **First test:** publish one image post early. Nobody has confirmed that
-  Meta fetches media from port 8443. If it doesn't, run a second Tailscale
-  node (for example `posty-media`) with Funnel on 443 serving only
-  `/media/`, and point `PUBLIC_MEDIA_URL` at it.
 
 ## Threads
 
