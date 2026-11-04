@@ -1,3 +1,4 @@
+import { fetchUrl } from "@/lib/gcs";
 import type { MediaItem } from "@/lib/media";
 import { NETWORKS } from "./catalog";
 import { metaFetch } from "./facebook";
@@ -44,10 +45,10 @@ async function publishContainer(acct: Account, creationId: string): Promise<Publ
   return { id, url: permalink ?? `https://www.threads.com/@${acct.username ?? ""}` };
 }
 
-const source = (m: MediaItem): Params =>
+const source = async (m: MediaItem): Promise<Params> =>
   m.kind === "video"
-    ? { media_type: "VIDEO", video_url: m.url, alt_text: m.altText || undefined }
-    : { media_type: "IMAGE", image_url: m.url, alt_text: m.altText || undefined };
+    ? { media_type: "VIDEO", video_url: await fetchUrl(m), alt_text: m.altText || undefined }
+    : { media_type: "IMAGE", image_url: await fetchUrl(m), alt_text: m.altText || undefined };
 
 export const threads: Network = {
   id: "threads",
@@ -113,9 +114,9 @@ export const threads: Network = {
     const { media, text } = part;
     let params: Params;
     if (!media.length) params = { media_type: "TEXT", text };
-    else if (media.length === 1) params = { ...source(media[0]), text };
+    else if (media.length === 1) params = { ...(await source(media[0])), text };
     else {
-      const children = await Promise.all(media.map((m) => container(acct, { ...source(m), is_carousel_item: "true" })));
+      const children = await Promise.all(media.map(async (m) => container(acct, { ...(await source(m)), is_carousel_item: "true" })));
       params = { media_type: "CAROUSEL", children: children.join(","), text };
     }
     return publishContainer(acct, await container(acct, { ...params, reply_to_id: ctx.replyTo?.parent.id }));

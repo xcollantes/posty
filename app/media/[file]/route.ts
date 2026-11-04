@@ -4,9 +4,8 @@ import { Readable } from "node:stream";
 import { EXT_MIME, MEDIA_NAME_RE, mediaPath, parseRange } from "@/lib/media";
 
 /**
- * Public media endpoint. It's the only path Tailscale Funnel exposes, so
- * networks like Instagram can fetch files by URL. Names are random UUIDs;
- * no listing, no traversal.
+ * Media endpoint for UI previews (and the no-GCS fallback URL handed to
+ * Meta). Names are random UUIDs; no listing, no traversal.
  */
 export async function GET(request: Request, ctx: RouteContext<"/media/[file]">) {
   const { file } = await ctx.params;

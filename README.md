@@ -34,15 +34,16 @@ over your Tailscale tailnet.
 
 ```
 docker compose
-├── tailscale  sidecar: :443 → UI (tailnet only), :8443 → /media/ (Funnel)
+├── tailscale  sidecar: :443 → UI (tailnet only)
 ├── app        Next.js UI + API (shares the sidecar's network)
 ├── worker     publishes due posts, refreshes tokens, collects metrics
 └── db         Postgres (also the job queue, no Redis)
 ```
 
-Instagram and Threads fetch images by URL, so `/media/` (and nothing else)
-is exposed publicly through Tailscale Funnel on port 8443. File names are
-random UUIDs, and every other path on :8443 returns 404 from Tailscale itself.
+Nothing on the host is public. Instagram, Threads and Facebook video fetch
+media by URL, so at publish time the worker copies the file to a private
+Google Cloud Storage bucket and hands Meta a signed URL that expires after
+an hour. A bucket lifecycle rule deletes the copies after a day.
 
 ## Setup
 
@@ -50,56 +51,78 @@ random UUIDs, and every other path on :8443 returns 404 from Tailscale itself.
    - Enable **MagicDNS** and **HTTPS certificates** (DNS page).
    - Create an auth key: Settings → Keys → *Generate auth key*. Make it
      reusable and tag it `tag:posty`.
-   - Allow the tag and Funnel in the access controls (policy file):
+   - Allow the tag in the access controls (policy file):
 
      ```json
-     "tagOwners": { "tag:posty": ["autogroup:admin"] },
-     "nodeAttrs": [{ "target": ["tag:posty"], "attr": ["funnel"] }]
+     "tagOwners": { "tag:posty": ["autogroup:admin"] }
      ```
 
-2. **Configure**
+2. **Google Cloud Storage** (only for Instagram, Threads and Facebook
+   video; skip it otherwise). With the `gcloud` CLI:
+
+   ```bash
+   PROJECT=my-project
+   BUCKET=posty-media-$(openssl rand -hex 4)
+   SA=posty-media@$PROJECT.iam.gserviceaccount.com
+
+   gcloud storage buckets create gs://$BUCKET --project=$PROJECT \
+     --location=us-west1 --uniform-bucket-level-access \
+     --public-access-prevention
+   echo '{"rule":[{"action":{"type":"Delete"},"condition":{"age":1}}]}' \
+     > lifecycle.json
+   gcloud storage buckets update gs://$BUCKET --lifecycle-file=lifecycle.json
+
+   gcloud iam service-accounts create posty-media --project=$PROJECT
+   gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
+     --member=serviceAccount:$SA --role=roles/storage.objectAdmin
+
+   mkdir -p secrets
+   gcloud iam service-accounts keys create secrets/gcs-key.json \
+     --iam-account=$SA
+   sudo chown 1000 secrets/gcs-key.json && chmod 600 secrets/gcs-key.json
+   ```
+
+   The containers run as uid 1000, so the key must be readable by it. Put
+   the bucket name in `GCS_BUCKET`.
+
+3. **Configure**
 
    ```bash
    cp .env.example .env
    openssl rand -base64 48   # paste as APP_KEY
    ```
 
-   Fill in `APP_URL`, `PUBLIC_MEDIA_URL`, `APP_KEY`, `ADMIN_EMAIL`,
-   `ADMIN_PASSWORD`, `POSTGRES_PASSWORD` and `TS_AUTHKEY`. With
+   Fill in `APP_URL`, `APP_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`,
+   `POSTGRES_PASSWORD`, `TS_AUTHKEY` and, from step 2, `GCS_BUCKET`. With
    `TS_HOSTNAME=posty` and the tailnet `tail1234.ts.net`:
 
    ```
    APP_URL=https://posty.tail1234.ts.net
-   PUBLIC_MEDIA_URL=https://posty.tail1234.ts.net:8443
    ```
 
-3. **Start**
+4. **Start**
 
    ```bash
    docker compose up -d --build
    ```
 
    Open `APP_URL` from any device on your tailnet and sign in with the
-   admin email and password. Funnel's public DNS can take up to 10 minutes
-   to appear.
+   admin email and password.
 
-4. **Connect networks**: create a developer app for each network you want
+5. **Connect networks**: create a developer app for each network you want
    (see [docs/networks.md](docs/networks.md)), put its keys in `.env`, run
    `docker compose up -d`, then use **Accounts → Connect**. Bluesky and
    Mastodon need no keys.
 
-5. **Queue**: add weekly time slots on the **Queue** page to use "Add to
+6. **Queue**: add weekly time slots on the **Queue** page to use "Add to
    queue".
 
-### Check the Funnel exposure
+### Check nothing is public
 
-From a machine **outside** your tailnet:
-
-```bash
-curl -I https://posty.tail1234.ts.net:8443/media/<a-file-name>   # 200
-curl -I https://posty.tail1234.ts.net:8443/login                 # 404
-curl -I https://posty.tail1234.ts.net/                           # no answer
-```
+From a machine **outside** your tailnet, `curl -I
+https://posty.tail1234.ts.net/` gets no answer. After an Instagram post,
+the worker log shows the upload; the plain object URL
+`https://storage.googleapis.com/<bucket>/<file>` returns 403.
 
 ## Operations
 
@@ -140,11 +163,12 @@ migration.
 |---------------------------------|----------------------------------------------------------|
 | `lib/networks/catalog.ts`       | client-safe limits, counters, composer options           |
 | `lib/networks/<id>.ts`          | one file per network: connect, publish, refresh, metrics |
+| `lib/gcs.ts`                    | signed GCS URLs for media Meta fetches by URL            |
 | `lib/publisher.ts`, `worker.ts` | claim due posts, publish, retry, roll up, sweeps         |
 | `lib/accounts.ts`               | token storage (AES-GCM) and locked refresh               |
 | `components/composer/`          | the post editor                                          |
 | `app/(app)/`                    | pages; `app/actions/` server actions                     |
-| `tailscale/serve.json`          | Serve/Funnel config for the sidecar                      |
+| `tailscale/serve.json`          | Serve config for the sidecar                             |
 
 ## Known limits
 

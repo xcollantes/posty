@@ -44,3 +44,6 @@ next-env.d.ts
 # posty
 /dist
 /data
+
+# GCS service account key
+/secrets/

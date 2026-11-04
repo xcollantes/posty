@@ -1,6 +1,7 @@
 # Posty: app + worker + Postgres, reachable only through a Tailscale sidecar.
 #   https://<TS_HOSTNAME>.<tailnet>.ts.net        UI (tailnet only)
-#   https://<TS_HOSTNAME>.<tailnet>.ts.net:8443   /media/ only, public via Funnel
+# Nothing is public: Meta fetches media from a private GCS bucket via signed
+# URLs (GCS_BUCKET in .env, key in ./secrets).
 services:
   tailscale:
     image: tailscale/tailscale:v1.104.5
@@ -55,6 +56,8 @@ services:
       MEDIA_DIR: /data/media
     volumes:
       - media:/data/media
+      # GCS key for signed media URLs (GOOGLE_APPLICATION_CREDENTIALS).
+      - ./secrets:/app/secrets:ro
     depends_on:
       app:
         condition: service_healthy # migrations have run

@@ -1,4 +1,5 @@
 import { openAsBlob } from "node:fs";
+import { fetchUrl } from "@/lib/gcs";
 import type { MediaItem } from "@/lib/media";
 import { NETWORKS } from "./catalog";
 import { creds, type FetchOptions, fetchJson, NetworkError, url } from "./http";
@@ -51,7 +52,7 @@ async function resumableVideo(acct: Account, edge: "video_reels" | "video_storie
   });
   await metaFetch(`${RUPLOAD}/${video_id}`, {
     method: "POST",
-    headers: { Authorization: `OAuth ${acct.accessToken}`, file_url: item.url },
+    headers: { Authorization: `OAuth ${acct.accessToken}`, file_url: await fetchUrl(item) },
     timeoutMs: UPLOAD_TIMEOUT,
   });
   const res = await metaFetch<Created>(base, {
@@ -150,7 +151,7 @@ export const facebook: Network = {
       const res = await metaFetch<{ id: string }>(`${GRAPH_VIDEO}/${page}/videos`, {
         method: "POST",
         bearer: acct.accessToken,
-        form: { file_url: video.url, description: part.text },
+        form: { file_url: await fetchUrl(video), description: part.text },
         final: true,
         timeoutMs: UPLOAD_TIMEOUT,
       });

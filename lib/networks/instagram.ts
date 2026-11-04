@@ -1,3 +1,4 @@
+import { fetchUrl } from "@/lib/gcs";
 import { asJpeg, type MediaItem } from "@/lib/media";
 import { NETWORKS } from "./catalog";
 import { metaFetch } from "./facebook";
@@ -30,7 +31,7 @@ async function container(acct: Account, params: Params): Promise<string> {
 }
 
 const source = async (item: MediaItem): Promise<Params> =>
-  item.kind === "video" ? { video_url: item.url } : { image_url: (await asJpeg(item)).url };
+  item.kind === "video" ? { video_url: await fetchUrl(item) } : { image_url: await fetchUrl(await asJpeg(item)) };
 
 export const instagram: Network = {
   id: "instagram",
@@ -111,7 +112,7 @@ export const instagram: Network = {
       // Standalone VIDEO is retired: single videos are reels shared to the feed.
       creationId = await container(acct, {
         media_type: "REELS",
-        video_url: first.url,
+        video_url: await fetchUrl(first),
         caption: part.text,
         share_to_feed: "true",
       });
