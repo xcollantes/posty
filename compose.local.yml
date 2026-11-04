@@ -1,0 +1,62 @@
+# Run Posty on http://localhost:3000 without Tailscale.
+#   docker compose -f compose.local.yml up -d --build
+# Instagram and Threads won't work here: they need public media URLs.
+services:
+  app:
+    build: .
+    image: posty:latest
+    ports:
+      - "127.0.0.1:3000:3000" # localhost only
+    env_file: .env
+    environment:
+      HOSTNAME: 0.0.0.0
+      APP_URL: http://localhost:3000
+      PUBLIC_MEDIA_URL: http://localhost:3000
+      DATABASE_URL: postgres://posty:posty@db:5432/posty
+      MEDIA_DIR: /data/media
+    volumes:
+      - media:/data/media
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    restart: unless-stopped
+
+  worker:
+    image: posty:latest
+    command: ["node", "dist/worker.mjs"]
+    env_file: .env
+    environment:
+      APP_URL: http://localhost:3000
+      PUBLIC_MEDIA_URL: http://localhost:3000
+      DATABASE_URL: postgres://posty:posty@db:5432/posty
+      MEDIA_DIR: /data/media
+    volumes:
+      - media:/data/media
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: posty
+      POSTGRES_PASSWORD: posty
+      POSTGRES_DB: posty
+    volumes:
+      - pgdata-local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posty -d posty"]
+      interval: 2s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  pgdata-local:
+  media:

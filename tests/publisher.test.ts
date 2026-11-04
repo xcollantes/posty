@@ -29,7 +29,7 @@ vi.mock("@/lib/networks", async () => {
 const { db, schema } = await import("@/lib/db");
 const { encrypt } = await import("@/lib/crypto");
 const { NetworkError } = await import("@/lib/networks/http");
-const { claimDue, failStuck, publishTarget } = await import("@/lib/publisher");
+const { claimDue, failMissed, failStuck, publishTarget } = await import("@/lib/publisher");
 
 const reachable = await db.execute(sql`select 1`).then(() => true, () => false);
 
@@ -155,5 +155,24 @@ describe.skipIf(!reachable)("publisher", () => {
     expect((await target(targetIds[0])).status).toBe("failed");
     expect((await post(postId)).status).toBe("failed");
     expect(calls).toEqual([]);
+  });
+
+  it("fails posts overdue past the cutoff instead of publishing late", async () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000);
+    const stale = await makePost(["stale"]);
+    const fresh = await makePost(["fresh"]);
+    // Saved just now with a past time: the user re-scheduled it, so it posts.
+    const resaved = await makePost(["resaved"]);
+    await db
+      .update(schema.posts)
+      .set({ scheduledAt: twoHoursAgo, updatedAt: twoHoursAgo })
+      .where(eq(schema.posts.postId, stale.postId));
+    await db.update(schema.posts).set({ scheduledAt: twoHoursAgo }).where(eq(schema.posts.postId, resaved.postId));
+    await failMissed();
+    expect((await target(stale.targetIds[0])).status).toBe("failed");
+    expect((await post(stale.postId)).status).toBe("failed");
+    expect((await target(fresh.targetIds[0])).status).toBe("pending");
+    expect((await target(resaved.targetIds[0])).status).toBe("pending");
+    expect((await claimDue(10)).sort()).toEqual([...fresh.targetIds, ...resaved.targetIds].sort());
   });
 });
