@@ -10,7 +10,7 @@ export function env(name: string, fallback?: string): string {
 /** Public base URL of the UI, e.g. https://posty.tailnet.ts.net */
 export const appUrl = () => env("APP_URL", "http://localhost:3000").replace(/\/$/, "");
 
-/** Public (Funnel) base URL for media, e.g. https://posty.tailnet.ts.net:8443 */
+/** Base URL for /media/ links, used when GCS_BUCKET is unset */
 export const publicMediaBase = () =>
   env("PUBLIC_MEDIA_URL", appUrl()).replace(/\/$/, "");
 

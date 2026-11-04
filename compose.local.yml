@@ -39,6 +39,8 @@ services:
       MEDIA_DIR: /data/media
     volumes:
       - media:/data/media
+      # GCS key for signed media URLs (GOOGLE_APPLICATION_CREDENTIALS).
+      - ./secrets:/app/secrets:ro
     depends_on:
       app:
         condition: service_healthy
