@@ -1,13 +1,15 @@
-import { asc, count, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import type { NetworkId } from "@/lib/networks/catalog";
+import { nextFreeSlot } from "@/lib/queue";
 import { rowToMedia } from "@/components/composer/media";
 import type { ComposerAccount, ComposerMedia } from "@/components/composer/types";
 
 const SAFE_META = ["boards", "maxChars", "maxMedia", "subscriptionType", "handle"];
 
-export async function composerData() {
-  const [accounts, mediaRows, snippets, tags, [{ slots }]] = await Promise.all([
+/** Everything the composer needs. `postId` is the post being edited, if any. */
+export async function composerData(timezone: string, postId?: string) {
+  const [accounts, mediaRows, snippets, tags, slots, taken] = await Promise.all([
     db
       .select()
       .from(schema.socialAccounts)
@@ -16,8 +18,20 @@ export async function composerData() {
     db.select().from(schema.media).orderBy(desc(schema.media.createdAt)).limit(300),
     db.select().from(schema.snippets).orderBy(asc(schema.snippets.name)),
     db.select().from(schema.tags).orderBy(asc(schema.tags.name)),
-    db.select({ slots: count() }).from(schema.queueSlots),
+    db.select().from(schema.queueSlots),
+    db
+      .select({ at: schema.posts.scheduledAt })
+      .from(schema.posts)
+      .where(
+        and(
+          isNotNull(schema.posts.scheduledAt),
+          ne(schema.posts.status, "draft"),
+          postId ? ne(schema.posts.postId, postId) : undefined,
+        ),
+      ),
   ]);
+  // Same rule savePost() uses for "Add to queue", shown ahead of time.
+  const nextSlot = nextFreeSlot(slots, taken.map((t) => t.at!), timezone);
   return {
     accounts: accounts.map(
       (a): ComposerAccount => ({
@@ -34,7 +48,8 @@ export async function composerData() {
     library: mediaRows.map(rowToMedia),
     snippets: snippets.map(({ snippetId, kind, name, body }) => ({ snippetId, kind, name, body })),
     tags: tags.map(({ tagId, name, color }) => ({ tagId, name, color })),
-    hasQueue: slots > 0,
+    nextSlot: nextSlot?.toISOString() ?? null,
+    timezone,
   };
 }
 

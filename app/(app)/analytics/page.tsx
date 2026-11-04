@@ -1,7 +1,14 @@
+import type { Metadata } from "next";
 import { desc, eq, sql } from "drizzle-orm";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
+
+export const metadata: Metadata = { title: "Analytics" };
+
+// null = the network never reported this number (shown as a dash, not 0).
+type Totals = { posts: number; views: number | null; likes: number | null; comments: number | null; shares: number | null };
+const add = (a: number | null, b: number | null) => (b === null ? a : (a ?? 0) + b);
 
 export default async function AnalyticsPage() {
   const user = await requireUser();
@@ -33,82 +40,101 @@ export default async function AnalyticsPage() {
     .orderBy(desc(schema.postTargets.publishedAt))
     .limit(200);
 
-  const totals = new Map<string, { posts: number; views: number; likes: number; comments: number; shares: number }>();
+  const totals = new Map<string, Totals>();
   for (const r of rows) {
-    const t = totals.get(r.network) ?? { posts: 0, views: 0, likes: 0, comments: 0, shares: 0 };
+    const t = totals.get(r.network) ?? { posts: 0, views: null, likes: null, comments: null, shares: null };
     t.posts++;
-    t.views += r.views ?? 0;
-    t.likes += r.likes ?? 0;
-    t.comments += r.comments ?? 0;
-    t.shares += r.shares ?? 0;
+    t.views = add(t.views, r.views);
+    t.likes = add(t.likes, r.likes);
+    t.comments = add(t.comments, r.comments);
+    t.shares = add(t.shares, r.shares);
     totals.set(r.network, t);
   }
-  const fmt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: user.timezone });
-  const n = (v: number | null) => (v === null ? "—" : v.toLocaleString());
+  const fmt = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: user.timezone });
+  const num = (v: number | null) => (v === null ? <span className="text-muted">–</span> : v.toLocaleString("en"));
+  const label = (network: string) => NETWORKS[network as NetworkId]?.label ?? network;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Analytics</h1>
-        <p className="text-sm text-muted">
-          Collected daily for posts from the last 30 days. LinkedIn personal accounts don&apos;t offer metrics; X metrics are
-          off unless <code>X_METRICS=1</code> (reads are billed).
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {[...totals].map(([network, t]) => (
-          <div key={network} className="card">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: NETWORKS[network as NetworkId]?.color }} />
-              {NETWORKS[network as NetworkId]?.label ?? network}
-            </div>
-            <dl className="mt-2 grid grid-cols-2 gap-x-2 text-xs">
-              <dt className="text-muted">Posts</dt><dd className="text-right tabular-nums">{t.posts}</dd>
-              <dt className="text-muted">Views</dt><dd className="text-right tabular-nums">{t.views.toLocaleString()}</dd>
-              <dt className="text-muted">Likes</dt><dd className="text-right tabular-nums">{t.likes.toLocaleString()}</dd>
-              <dt className="text-muted">Comments</dt><dd className="text-right tabular-nums">{t.comments.toLocaleString()}</dd>
-              <dt className="text-muted">Shares</dt><dd className="text-right tabular-nums">{t.shares.toLocaleString()}</dd>
-            </dl>
-          </div>
-        ))}
-      </div>
-      <div className="overflow-x-auto rounded-lg border border-border bg-panel">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase text-muted">
-            <tr className="border-b border-border">
-              <th className="p-2">Post</th>
-              <th className="p-2">Network</th>
-              <th className="p-2">Published</th>
-              <th className="p-2 text-right">Views</th>
-              <th className="p-2 text-right">Likes</th>
-              <th className="p-2 text-right">Comments</th>
-              <th className="p-2 text-right">Shares</th>
-              <th className="p-2 text-right">Clicks</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
+    <div>
+      <h1>Analytics</h1>
+      <p className="hint mt-1 max-w-2xl">
+        Updated once a day for posts from the last 30 days. LinkedIn doesn&apos;t share numbers with personal apps, and X
+        is off unless <code>X_METRICS=1</code> because X bills each read.
+      </p>
+
+      {rows.length === 0 ? (
+        <p className="mt-6 text-muted">Nothing published yet.</p>
+      ) : (
+        <>
+          <h2 className="mt-8">By network</h2>
+          <table className="data-table mt-2 max-w-2xl">
+            <thead>
               <tr>
-                <td colSpan={8} className="p-4 text-center text-muted">No published posts yet.</td>
+                <th>Network</th>
+                <th className="text-right">Posts</th>
+                <th className="text-right">Views</th>
+                <th className="text-right">Likes</th>
+                <th className="text-right">Comments</th>
+                <th className="text-right">Shares</th>
               </tr>
-            )}
-            {rows.map((r) => (
-              <tr key={r.postTargetId} className="border-b border-border last:border-0">
-                <td className="max-w-xs truncate p-2">
-                  {r.url ? <a href={r.url} target="_blank" rel="noreferrer" className="hover:underline">{r.text || "(media)"}</a> : r.text}
-                </td>
-                <td className="whitespace-nowrap p-2">{NETWORKS[r.network as NetworkId]?.label} · {r.account}</td>
-                <td className="whitespace-nowrap p-2">{r.publishedAt ? fmt.format(r.publishedAt) : ""}</td>
-                <td className="p-2 text-right tabular-nums">{n(r.views)}</td>
-                <td className="p-2 text-right tabular-nums">{n(r.likes)}</td>
-                <td className="p-2 text-right tabular-nums">{n(r.comments)}</td>
-                <td className="p-2 text-right tabular-nums">{n(r.shares)}</td>
-                <td className="p-2 text-right tabular-nums">{n(r.clicks)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="tabular-nums">
+              {[...totals].map(([network, t]) => (
+                <tr key={network}>
+                  <td>{label(network)}</td>
+                  <td className="text-right">{t.posts}</td>
+                  <td className="text-right">{num(t.views)}</td>
+                  <td className="text-right">{num(t.likes)}</td>
+                  <td className="text-right">{num(t.comments)}</td>
+                  <td className="text-right">{num(t.shares)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h2 className="mt-10">By post</h2>
+          <div className="overflow-x-auto">
+            <table className="data-table mt-2 min-w-[760px]">
+              <thead>
+                <tr>
+                  <th className="w-20">Date</th>
+                  <th>Post</th>
+                  <th className="w-44">Where</th>
+                  <th className="text-right">Views</th>
+                  <th className="text-right">Likes</th>
+                  <th className="text-right">Comments</th>
+                  <th className="text-right">Shares</th>
+                  <th className="text-right">Clicks</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {rows.map((r) => (
+                  <tr key={r.postTargetId}>
+                    <td className="whitespace-nowrap">{r.publishedAt ? fmt.format(r.publishedAt) : ""}</td>
+                    <td className="max-w-xs truncate">
+                      {r.url ? (
+                        <a href={r.url} target="_blank" rel="noreferrer">
+                          {r.text || "(media only)"}
+                        </a>
+                      ) : (
+                        r.text
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {label(r.network)} <span className="text-muted">{r.account}</span>
+                    </td>
+                    <td className="text-right">{num(r.views)}</td>
+                    <td className="text-right">{num(r.likes)}</td>
+                    <td className="text-right">{num(r.comments)}</td>
+                    <td className="text-right">{num(r.shares)}</td>
+                    <td className="text-right">{num(r.clicks)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

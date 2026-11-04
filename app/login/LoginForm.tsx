@@ -8,16 +8,16 @@ export function LoginForm({ next }: { next: string }) {
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="next" value={next} />
-      <div>
-        <label className="label" htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" autoComplete="username" required className="input" />
-      </div>
-      <div>
-        <label className="label" htmlFor="password">Password</label>
-        <input id="password" name="password" type="password" autoComplete="current-password" required className="input" />
-      </div>
-      {state?.error && <p role="alert" className="text-sm text-red-600">{state.error}</p>}
-      <button className="btn-primary w-full" disabled={pending}>
+      <label className="block text-sm">
+        Email
+        <input name="email" type="email" autoComplete="username" required autoFocus className="input mt-1" />
+      </label>
+      <label className="block text-sm">
+        Password
+        <input name="password" type="password" autoComplete="current-password" required className="input mt-1" />
+      </label>
+      {state?.error && <p role="alert" className="text-sm text-danger">{state.error}</p>}
+      <button className="btn-primary" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>

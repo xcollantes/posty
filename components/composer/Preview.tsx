@@ -2,7 +2,7 @@ import type { PostPart } from "@/lib/db/schema";
 import { NETWORKS } from "@/lib/networks/catalog";
 import type { ComposerAccount, ComposerMedia } from "./types";
 
-/** Generic per-account preview card (deliberately not a copy of any network's UI). */
+/** Roughly how the post will read on one account. Plain on purpose. */
 export function Preview({
   account,
   parts,
@@ -15,37 +15,38 @@ export function Preview({
   const info = NETWORKS[account.network];
   const shown = info.threads ? parts : parts.slice(0, 1);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-panel">
-      <div className="h-1" style={{ background: info.color }} />
+    <article className="rounded-[4px] border border-line">
+      <header className="border-b border-line px-3 py-1.5 text-xs text-muted">{info.label}</header>
       {shown.map((part, i) => (
-        <div key={i} className={i > 0 ? "border-t border-dashed border-border" : ""}>
-          <div className="flex items-center gap-2 px-3 pt-3">
+        <div key={i} className={`px-3 py-3 ${i > 0 ? "border-t border-line" : ""}`}>
+          <div className="flex items-center gap-2">
             <Avatar account={account} />
             <div className="min-w-0 text-sm leading-tight">
               <div className="truncate font-medium">{account.name}</div>
-              <div className="truncate text-xs text-muted">
-                {info.label}
-                {account.username ? ` · ${account.username}` : ""}
-              </div>
+              {account.username && <div className="truncate text-xs text-muted">{account.username}</div>}
             </div>
           </div>
-          <p className="whitespace-pre-wrap break-words px-3 py-2 text-sm">{part.text || <span className="text-muted">…</span>}</p>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+            {part.text || <span className="text-muted">Nothing written yet.</span>}
+          </p>
           {part.mediaIds.length > 0 && (
-            <div className={`grid gap-0.5 ${part.mediaIds.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+            <div
+              className={`mt-2 grid gap-0.5 overflow-hidden rounded-[3px] ${part.mediaIds.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}
+            >
               {part.mediaIds.slice(0, 4).map((id, j) => {
                 const m = media[id];
                 if (!m) return null;
                 const more = j === 3 && part.mediaIds.length > 4 ? part.mediaIds.length - 4 : 0;
                 return (
-                  <div key={id} className="relative aspect-square bg-background">
+                  <div key={id} className="relative aspect-square bg-soft">
                     {m.kind === "video" ? (
-                      <video src={m.src} className="h-full w-full object-cover" muted preload="metadata" />
+                      <video src={m.src} className="size-full object-cover" muted preload="metadata" />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={m.src} alt={m.altText} className="h-full w-full object-cover" />
+                      <img src={m.src} alt={m.altText} className="size-full object-cover" />
                     )}
                     {more > 0 && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-lg font-semibold text-white">
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white">
                         +{more}
                       </div>
                     )}
@@ -56,19 +57,19 @@ export function Preview({
           )}
         </div>
       ))}
-    </div>
+    </article>
   );
 }
 
-export function Avatar({ account, size = 32 }: { account: Pick<ComposerAccount, "avatar" | "name" | "network">; size?: number }) {
-  const info = NETWORKS[account.network];
+export function Avatar({ account, size = 28 }: { account: Pick<ComposerAccount, "avatar" | "name">; size?: number }) {
   return account.avatar ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={account.avatar} alt="" width={size} height={size} className="shrink-0 rounded-full" style={{ outline: `2px solid ${info.color}` }} />
+    <img src={account.avatar} alt="" width={size} height={size} className="shrink-0 rounded-full" />
   ) : (
     <div
-      className="flex shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-      style={{ width: size, height: size, background: info.color }}
+      aria-hidden
+      className="flex shrink-0 items-center justify-center rounded-full border border-line bg-soft text-xs text-muted"
+      style={{ width: size, height: size }}
     >
       {account.name.slice(0, 1).toUpperCase()}
     </div>

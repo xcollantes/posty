@@ -21,20 +21,22 @@ export function ActionForm({
     <form action={formAction} className={className ?? "space-y-3"}>
       {children}
       <div className="flex items-center gap-3">
-        <button className="btn-primary" disabled={pending}>{pending ? "Saving…" : submitLabel}</button>
-        {state?.error && <span role="alert" className="text-sm text-red-600">{state.error}</span>}
-        {state?.ok && <span className="text-sm text-green-600">{state.ok}</span>}
+        <button className="btn-primary" disabled={pending}>
+          {pending ? "Saving…" : submitLabel}
+        </button>
+        {state?.error && <span role="alert" className="text-sm text-danger">{state.error}</span>}
+        {state?.ok && <span className="text-sm text-ok">{state.ok}</span>}
       </div>
     </form>
   );
 }
 
-/** A one-button form for a bound server action (delete, etc.). */
+/** A one-word button for a bound server action (delete, remove…). */
 export function ActionButton({
   action,
   label,
   confirm,
-  className = "btn-danger",
+  className = "danger-btn text-sm",
 }: {
   action: () => Promise<unknown>;
   label: string;
