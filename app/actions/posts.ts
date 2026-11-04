@@ -206,7 +206,7 @@ export async function reschedulePost(postId: string, iso: string): Promise<{ ok:
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return { ok: false, error: "Invalid date" };
   const [post] = await db.select().from(schema.posts).where(eq(schema.posts.postId, postId));
-  if (!post || !["draft", "scheduled", "failed"].includes(post.status)) {
+  if (!post || !["draft", "scheduled"].includes(post.status)) {
     return { ok: false, error: "Only drafts and scheduled posts can be moved" };
   }
   const busy = await db

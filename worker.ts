@@ -3,7 +3,7 @@
  * tokens fresh and collects metrics. Run with `node dist/worker.js`.
  */
 import { getSetting, setSetting } from "@/lib/settings";
-import { claimDue, failStuck, log, metricsSweep, publishTarget, refreshSweep } from "@/lib/publisher";
+import { claimDue, failMissed, failStuck, log, metricsSweep, publishTarget, refreshSweep } from "@/lib/publisher";
 
 const TICK_MS = 10_000;
 const HOUR = 3_600_000;
@@ -19,6 +19,7 @@ async function maybeDaily() {
 
 async function tick() {
   await failStuck();
+  await failMissed();
   // Drain everything that's due before sleeping again.
   for (;;) {
     const ids = await claimDue(5);
