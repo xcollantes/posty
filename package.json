@@ -21,6 +21,7 @@
     "@fullcalendar/interaction": "^6.1.22",
     "@fullcalendar/react": "^6.1.22",
     "@fullcalendar/timegrid": "^6.1.22",
+    "@google-cloud/storage": "^8.4.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.4",
     "emoji-picker-element": "^1.29.1",
