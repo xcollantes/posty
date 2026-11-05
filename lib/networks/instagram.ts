@@ -47,6 +47,7 @@ export const instagram: Network = {
           response_type: "code",
           scope: SCOPES,
           state: ctx.state,
+          force_reauth: "true", // ask for login even if signed in, so a 2nd account can be added
         }),
       };
     },

@@ -90,7 +90,7 @@ export const youtube: Network = {
           response_type: "code",
           scope: SCOPES,
           access_type: "offline",
-          prompt: "consent",
+          prompt: "select_account consent", // chooser, so a 2nd Google account can be added
           include_granted_scopes: "true",
           state: ctx.state,
         }),
