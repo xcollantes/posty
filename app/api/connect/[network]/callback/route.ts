@@ -35,8 +35,8 @@ export async function GET(request: Request, ctx: RouteContext<"/api/connect/[net
       data: saved.data,
     });
     if (!accounts.length) return accountsRedirect({ error: `${network.info.label}: no accounts were granted` });
-    await saveConnected(id, accounts);
-    return accountsRedirect({ connected: String(accounts.length) });
+    const { added } = await saveConnected(id, accounts);
+    return accountsRedirect({ connected: String(added), network: network.info.label });
   } catch (err) {
     return accountsRedirect({ error: `${network.info.label}: ${(err as Error).message}` });
   }

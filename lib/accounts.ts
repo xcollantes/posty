@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db, schema } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/crypto";
@@ -35,8 +35,19 @@ async function avatarDataUri(url: string | null | undefined): Promise<string | n
   }
 }
 
-/** Insert or update accounts returned by a connect flow. */
+/**
+ * Insert or update accounts returned by a connect flow. `refreshed` counts
+ * accounts that were already connected, i.e. the provider reused the
+ * browser's sign-in instead of letting the user pick another account.
+ */
 export async function saveConnected(network: string, accounts: ConnectedAccount[]) {
+  const ids = accounts.map((a) => a.providerAccountId);
+  const existing = ids.length
+    ? await db
+        .select({ id: schema.socialAccounts.providerAccountId })
+        .from(schema.socialAccounts)
+        .where(and(eq(schema.socialAccounts.network, network), inArray(schema.socialAccounts.providerAccountId, ids)))
+    : [];
   for (const a of accounts) {
     const values = {
       network,
@@ -60,6 +71,7 @@ export async function saveConnected(network: string, accounts: ConnectedAccount[
         set: values,
       });
   }
+  return { added: accounts.length - existing.length, refreshed: existing.length };
 }
 
 async function applyTokens(tx: Pick<typeof db, "update">, row: Row, t: TokenSet) {

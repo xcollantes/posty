@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Info } from "lucide-react";
 import { Avatar } from "@/components/composer/Preview";
 import { Card, Page } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
@@ -31,7 +31,7 @@ const configured = (id: NetworkId) => {
 
 export default async function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   const user = await requireUser();
-  const { error, connected } = await searchParams;
+  const { error, connected, network } = await searchParams;
   const accounts = await db
     .select()
     .from(schema.socialAccounts)
@@ -49,11 +49,19 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
             {error}
           </p>
         )}
-        {typeof connected === "string" && (
-          <p className="card flex items-center gap-2 px-5 py-3 text-sm font-semibold text-ok">
-            <CircleCheck className="size-4 shrink-0" />
-            Connected {connected} account{connected === "1" ? "" : "s"}.
+        {connected === "0" ? (
+          <p className="card flex items-center gap-2 px-5 py-3 text-sm font-semibold">
+            <Info className="size-4 shrink-0" />
+            Refreshed the {network} account you already had. To add a different one, switch accounts (or sign out) on{" "}
+            {network} in this browser, then Connect again.
           </p>
+        ) : (
+          typeof connected === "string" && (
+            <p className="card flex items-center gap-2 px-5 py-3 text-sm font-semibold text-ok">
+              <CircleCheck className="size-4 shrink-0" />
+              Connected {connected} new account{connected === "1" ? "" : "s"}.
+            </p>
+          )
         )}
 
         <Card title="Connected accounts" flush className="overflow-hidden">
@@ -121,7 +129,13 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
 
         <Card
           title="Add an account"
-          hint={<>Most networks need a developer app first; docs/networks.md has the steps. Bluesky and Mastodon don&apos;t.</>}
+          hint={
+            <>
+              Most networks need a developer app first; docs/networks.md has the steps. Bluesky and Mastodon don&apos;t.
+              Connect again to add another account on the same network. X, LinkedIn, Pinterest and Threads use
+              whichever account this browser is signed in to, so switch accounts there first.
+            </>
+          }
         >
           <ul className="grid gap-3 sm:grid-cols-2">
             {NETWORK_IDS.map((id) => {
