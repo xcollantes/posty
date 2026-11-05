@@ -26,6 +26,7 @@
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.4",
     "emoji-picker-element": "^1.29.1",
+    "lucide-react": "^1.68.0",
     "next": "16.4.5",
     "postgres": "^3.4.9",
     "react": "19.3.0",

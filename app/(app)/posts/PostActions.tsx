@@ -1,5 +1,6 @@
 "use client";
 
+import { Copy, Pencil, RotateCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -10,15 +11,27 @@ export function PostActions({ postId, status }: { postId: string; status: string
   const [pending, start] = useTransition();
   const editable = status === "draft" || status === "scheduled" || status === "failed";
   return (
-    <div className="flex gap-3 whitespace-nowrap">
-      {editable && <Link href={`/compose/${postId}`}>Edit</Link>}
+    <div className="flex gap-0.5">
+      {editable && (
+        <Link href={`/compose/${postId}`} className="icon-btn" aria-label="Edit" title="Edit">
+          <Pencil className="size-4" />
+        </Link>
+      )}
       {(status === "failed" || status === "partial") && (
-        <button className="link-btn" disabled={pending} onClick={() => start(() => retryPost(postId))}>
-          Retry
+        <button
+          className="icon-btn"
+          aria-label="Retry"
+          title="Retry"
+          disabled={pending}
+          onClick={() => start(() => retryPost(postId))}
+        >
+          <RotateCw className="size-4" />
         </button>
       )}
       <button
-        className="link-btn"
+        className="icon-btn"
+        aria-label="Duplicate"
+        title="Duplicate"
         disabled={pending}
         onClick={() =>
           start(async () => {
@@ -27,10 +40,12 @@ export function PostActions({ postId, status }: { postId: string; status: string
           })
         }
       >
-        Duplicate
+        <Copy className="size-4" />
       </button>
       <button
-        className="danger-btn"
+        className="icon-btn icon-btn-danger"
+        aria-label="Delete"
+        title="Delete"
         disabled={pending}
         onClick={() => {
           // Only removes it from Posty; anything already live stays on the network.
@@ -39,7 +54,7 @@ export function PostActions({ postId, status }: { postId: string; status: string
           }
         }}
       >
-        Delete
+        <Trash2 className="size-4" />
       </button>
     </div>
   );

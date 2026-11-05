@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft, Bold, Code, Hash, ImagePlus, Images, Italic, Plus, Trash2, X, type LucideIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { updateAltText } from "@/app/actions/library";
 import type { PostPart } from "@/lib/db/schema";
@@ -40,7 +41,12 @@ export function PartsEditor(props: Props) {
         />
       ))}
       {allowThread && (
-        <button type="button" className="link-btn text-sm" onClick={() => update((ps) => [...ps, { text: "", mediaIds: [] }])}>
+        <button
+          type="button"
+          className="link-btn inline-flex items-center gap-1.5 text-sm"
+          onClick={() => update((ps) => [...ps, { text: "", mediaIds: [] }])}
+        >
+          <Plus className="size-4" />
           Add another post to the thread
         </button>
       )}
@@ -49,10 +55,10 @@ export function PartsEditor(props: Props) {
 }
 
 // Networks only take plain text, so "rich text" means Unicode letter styles.
-const STYLES: [TextStyle, string][] = [
-  ["bold", "Bold"],
-  ["italic", "Italic"],
-  ["mono", "Mono"],
+const STYLES: [TextStyle, string, LucideIcon][] = [
+  ["bold", "Bold", Bold],
+  ["italic", "Italic", Italic],
+  ["mono", "Mono", Code],
 ];
 
 function PartEditor({
@@ -128,12 +134,13 @@ function PartEditor({
       }}
     >
       {total > 1 && (
-        <div className="mb-1 flex items-baseline justify-between text-sm">
-          <span className="text-muted">
+        <div className="mb-2 flex items-center justify-between text-sm">
+          <span className="chip bg-soft text-muted">
             {index + 1} of {total}
           </span>
           {index > 0 && (
-            <button type="button" className="danger-btn" onClick={onRemove}>
+            <button type="button" className="danger-btn inline-flex items-center gap-1" onClick={onRemove}>
+              <Trash2 className="size-3.5" />
               Remove
             </button>
           )}
@@ -148,48 +155,65 @@ function PartEditor({
         }}
         rows={index === 0 ? 7 : 4}
         placeholder={index === 0 ? "Write your post…" : ""}
-        className="input block resize-y px-2.5 py-2 leading-relaxed"
+        className="input block resize-y px-3.5 py-3 text-[15px] leading-relaxed"
         aria-label={total > 1 ? `Post ${index + 1} of ${total}` : "Post text"}
       />
 
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-sm">
-        {STYLES.map(([style, label]) => (
+      <div className="mt-2 flex flex-wrap items-center gap-1 text-sm">
+        {STYLES.map(([style, label, Icon]) => (
           <button
             key={style}
             type="button"
-            className="link-btn"
+            className="icon-btn"
+            aria-label={label}
             title={`${label}: select some text first`}
             onClick={() => replaceSelection((s) => applyStyle(s, style))}
           >
-            {label}
+            <Icon className="size-4" />
           </button>
         ))}
         <EmojiButton onPick={(emoji) => replaceSelection(() => emoji)} />
+        <span className="mx-1 h-5 w-px bg-line" />
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Add images or video"
+          title="Add images or video"
+          onClick={() => fileInput.current?.click()}
+        >
+          <ImagePlus className="size-4" />
+        </button>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Media library"
+          title="Media library"
+          onClick={() => dialog.current?.showModal()}
+        >
+          <Images className="size-4" />
+        </button>
         {snippets.length > 0 && (
-          <select
-            className="cursor-pointer bg-transparent text-link [field-sizing:content]"
-            value=""
-            onChange={(e) => {
-              const s = snippets.find((x) => x.snippetId === e.target.value);
-              if (s) replaceSelection(() => (s.kind === "hashtags" ? ` ${s.body}` : s.body));
-            }}
-            aria-label="Insert snippet"
-          >
-            <option value="">Insert snippet</option>
-            {snippets.map((s) => (
-              <option key={s.snippetId} value={s.snippetId}>
-                {s.name}
-                {s.kind === "hashtags" ? " (hashtags)" : ""}
-              </option>
-            ))}
-          </select>
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-lg px-2 font-semibold text-muted hover:bg-soft hover:text-fg">
+            <Hash className="size-4" />
+            <select
+              className="cursor-pointer bg-transparent [field-sizing:content]"
+              value=""
+              onChange={(e) => {
+                const s = snippets.find((x) => x.snippetId === e.target.value);
+                if (s) replaceSelection(() => (s.kind === "hashtags" ? ` ${s.body}` : s.body));
+              }}
+              aria-label="Insert snippet"
+            >
+              <option value="">Insert snippet</option>
+              {snippets.map((s) => (
+                <option key={s.snippetId} value={s.snippetId}>
+                  {s.name}
+                  {s.kind === "hashtags" ? " (hashtags)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
         )}
-        <button type="button" className="link-btn" onClick={() => fileInput.current?.click()}>
-          Add images or video
-        </button>
-        <button type="button" className="link-btn" onClick={() => dialog.current?.showModal()}>
-          Media library
-        </button>
         <input
           ref={fileInput}
           type="file"
@@ -201,12 +225,12 @@ function PartEditor({
             e.target.value = "";
           }}
         />
-        <span className="ml-auto flex flex-wrap gap-x-3 tabular-nums text-muted">
+        <span className="ml-auto flex flex-wrap gap-1.5">
           {counters(part.text).map((c) => (
             <span
               key={c.label}
               title={`${c.count} of ${c.max} characters`}
-              className={c.count > c.max ? "font-medium text-danger" : undefined}
+              className={`chip tabular-nums ${c.count > c.max ? "bg-danger/12 text-danger" : "bg-soft text-muted"}`}
             >
               {c.label} {c.max - c.count}
             </span>
@@ -215,12 +239,12 @@ function PartEditor({
       </div>
 
       {part.mediaIds.length > 0 && (
-        <ul className="mt-3 flex flex-wrap gap-4">
+        <ul className="mt-4 flex flex-wrap gap-3">
           {part.mediaIds.map((id, i) => {
             const m = media[id];
             return (
               <li key={id} className="w-28 text-xs">
-                <div className="size-28 overflow-hidden rounded-[3px] border border-line bg-soft">
+                <div className="size-28 overflow-hidden rounded-xl border border-line bg-soft">
                   {m?.kind === "video" ? (
                     <video src={m.src} className="size-full object-cover" muted preload="metadata" />
                   ) : m ? (
@@ -230,21 +254,29 @@ function PartEditor({
                     <p className="p-2 text-muted">Missing file</p>
                   )}
                 </div>
-                <div className="mt-1 flex gap-2">
-                  <button type="button" className="link-btn" onClick={() => setAltFor(altFor === id ? null : id)}>
+                <div className="mt-1 flex items-center gap-0.5">
+                  <button type="button" className="link-btn mr-auto" onClick={() => setAltFor(altFor === id ? null : id)}>
                     {m?.altText ? "Alt text" : "Add alt"}
                   </button>
                   {i > 0 && (
-                    <button type="button" className="link-btn" aria-label="Move earlier" onClick={() => move(i, i - 1)}>
-                      ←
+                    <button
+                      type="button"
+                      className="icon-btn size-6"
+                      aria-label="Move earlier"
+                      title="Move earlier"
+                      onClick={() => move(i, i - 1)}
+                    >
+                      <ArrowLeft className="size-3.5" />
                     </button>
                   )}
                   <button
                     type="button"
-                    className="danger-btn"
+                    className="icon-btn icon-btn-danger size-6"
+                    aria-label="Remove"
+                    title="Remove"
                     onClick={() => change((p) => ({ ...p, mediaIds: p.mediaIds.filter((x) => x !== id) }))}
                   >
-                    Remove
+                    <X className="size-3.5" />
                   </button>
                 </div>
               </li>
@@ -253,7 +285,7 @@ function PartEditor({
         </ul>
       )}
       {altFor && media[altFor] && (
-        <div className="mt-2 flex max-w-xl gap-2">
+        <div className="mt-3 flex max-w-xl gap-2">
           <input
             className="input"
             aria-label="Alt text"
@@ -272,20 +304,26 @@ function PartEditor({
         </div>
       )}
       {uploads.map((u) => (
-        <p key={u.name} className="mt-1 text-sm text-muted">
+        <p key={u.name} className="mt-2 text-sm text-muted">
           Uploading {u.name}: {Math.round(u.progress * 100)}%
         </p>
       ))}
-      {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
 
       <dialog
         ref={dialog}
-        className="m-auto w-[min(92vw,46rem)] rounded-[4px] border border-line bg-bg p-4 text-fg backdrop:bg-black/40"
+        className="m-auto w-[min(92vw,46rem)] rounded-2xl border border-line bg-bg p-5 text-fg shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-sm"
       >
-        <div className="mb-3 flex items-baseline justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <h2>Media library</h2>
-          <button type="button" className="link-btn text-sm" onClick={() => dialog.current?.close()}>
-            Close
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Close"
+            title="Close"
+            onClick={() => dialog.current?.close()}
+          >
+            <X className="size-4" />
           </button>
         </div>
         {library.length === 0 && <p className="hint">Nothing uploaded yet.</p>}
@@ -295,7 +333,7 @@ function PartEditor({
               key={m.mediaId}
               type="button"
               title={m.originalName}
-              className="aspect-square cursor-pointer overflow-hidden rounded-[3px] border border-line hover:border-fg"
+              className="aspect-square cursor-pointer overflow-hidden rounded-xl border border-line hover:border-link"
               onClick={() => {
                 onMedia(m);
                 change((p) => (p.mediaIds.includes(m.mediaId) ? p : { ...p, mediaIds: [...p.mediaIds, m.mediaId] }));

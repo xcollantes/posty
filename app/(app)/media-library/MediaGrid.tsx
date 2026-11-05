@@ -1,5 +1,6 @@
 "use client";
 
+import { CloudUpload, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { deleteMedia, updateAltText } from "@/app/actions/library";
 import type { ComposerMedia } from "@/components/composer/types";
@@ -32,34 +33,42 @@ export function MediaGrid({ initial }: { initial: ComposerMedia[] }) {
         upload(e.dataTransfer.files);
       }}
     >
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <button className="btn" onClick={() => input.current?.click()}>
-          Upload
-        </button>
-        <span className="hint">or drop files on this page. JPEG, PNG, WebP, GIF, MP4 or MOV, up to 1 GB.</span>
-        <input
-          ref={input}
-          type="file"
-          multiple
-          accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
-          className="hidden"
-          onChange={(e) => e.target.files && upload(e.target.files)}
-        />
+      <div className="card p-5">
+        <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line px-6 py-10 text-center">
+          <span className="grid size-12 place-items-center rounded-2xl bg-[image:var(--grad-cta)] text-white">
+            <CloudUpload className="size-6" />
+          </span>
+          <div>
+            <p className="font-semibold">Drop files here</p>
+            <p className="hint mt-0.5">JPEG, PNG, WebP, GIF, MP4 or MOV, up to 1 GB.</p>
+          </div>
+          <button className="btn-primary" onClick={() => input.current?.click()}>
+            Upload
+          </button>
+          <input
+            ref={input}
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
+            className="hidden"
+            onChange={(e) => e.target.files && upload(e.target.files)}
+          />
+          {busy && <p className="text-sm text-muted">{busy}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+        </div>
       </div>
-      {busy && <p className="mt-2 text-sm text-muted">{busy}</p>}
-      {error && (
-        <p role="alert" className="mt-2 text-sm text-danger">
-          {error}
-        </p>
-      )}
 
       {items.length === 0 ? (
-        <p className="mt-6 text-muted">Nothing uploaded yet.</p>
+        <p className="mt-8 text-center text-muted">Nothing uploaded yet.</p>
       ) : (
-        <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-x-5 gap-y-7">
+        <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-4">
           {items.map((m) => (
-            <li key={m.mediaId} className="min-w-0 text-sm">
-              <div className="aspect-square overflow-hidden rounded-[3px] border border-line bg-soft">
+            <li key={m.mediaId} className="card min-w-0 overflow-hidden">
+              <div className="aspect-square bg-soft">
                 {m.kind === "video" ? (
                   <video src={m.src} controls preload="metadata" className="size-full object-cover" />
                 ) : (
@@ -67,32 +76,40 @@ export function MediaGrid({ initial }: { initial: ComposerMedia[] }) {
                   <img src={m.src} alt={m.altText} className="size-full object-cover" loading="lazy" />
                 )}
               </div>
-              <p className="mt-1.5 truncate" title={m.originalName}>
-                {m.originalName}
-              </p>
-              {m.width && m.height && (
-                <p className="text-xs text-muted">
-                  {m.width} × {m.height}
-                </p>
-              )}
-              <input
-                className="input mt-1.5 py-0.5 text-sm"
-                placeholder="Alt text"
-                defaultValue={m.altText}
-                aria-label={`Alt text for ${m.originalName}`}
-                onBlur={(e) => e.target.value !== m.altText && updateAltText(m.mediaId, e.target.value)}
-              />
-              <button
-                className="danger-btn mt-1 text-xs"
-                onClick={async () => {
-                  if (!window.confirm("Delete this file?")) return;
-                  const res = await deleteMedia(m.mediaId);
-                  if (res.error) setError(res.error);
-                  else setItems((all) => all.filter((x) => x.mediaId !== m.mediaId));
-                }}
-              >
-                Delete
-              </button>
+              <div className="space-y-2 p-3">
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold" title={m.originalName}>
+                      {m.originalName}
+                    </p>
+                    {m.width && m.height && (
+                      <p className="text-xs text-muted">
+                        {m.width} × {m.height}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    className="icon-btn icon-btn-danger"
+                    aria-label={`Delete ${m.originalName}`}
+                    title="Delete"
+                    onClick={async () => {
+                      if (!window.confirm("Delete this file?")) return;
+                      const res = await deleteMedia(m.mediaId);
+                      if (res.error) setError(res.error);
+                      else setItems((all) => all.filter((x) => x.mediaId !== m.mediaId));
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+                <input
+                  className="input py-1.5"
+                  placeholder="Alt text"
+                  defaultValue={m.altText}
+                  aria-label={`Alt text for ${m.originalName}`}
+                  onBlur={(e) => e.target.value !== m.altText && updateAltText(m.mediaId, e.target.value)}
+                />
+              </div>
             </li>
           ))}
         </ul>
