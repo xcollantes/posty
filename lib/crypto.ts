@@ -77,3 +77,17 @@ export function unsign<T>(token: string | undefined): T | null {
 /** PKCE S256 challenge for a verifier. */
 export const pkceChallenge = (verifier: string) =>
   createHash("sha256").update(verifier).digest("base64url");
+
+/**
+ * True when an `Authorization: Bearer <token>` header carries `token`.
+ * Fails closed when `token` is unset. Hashing first lets the constant-time
+ * compare handle tokens of different lengths.
+ */
+export function bearerOk(header: string | null, token: string | undefined): boolean {
+  const given = header?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token || !given) return false;
+  return timingSafeEqual(
+    createHash("sha256").update(given).digest(),
+    createHash("sha256").update(token).digest(),
+  );
+}
