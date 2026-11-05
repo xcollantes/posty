@@ -1,144 +1,180 @@
 # Posty
 
-A self-hosted social media scheduler in the spirit of Buffer and Mixpost. It
-publishes to Facebook Pages, Instagram, Threads, X, LinkedIn, Pinterest,
-YouTube, TikTok, Bluesky and Mastodon. It runs in Docker and is reachable only
-over your Tailscale tailnet.
+Write a post once and publish it to Facebook Pages, Instagram, Threads, X,
+LinkedIn, Pinterest, YouTube, TikTok, Bluesky and Mastodon. Posty is a
+self-hosted scheduler in the spirit of Buffer and Mixpost. It runs in Docker
+and is reachable only from your own Tailscale network.
 
-## Features
+![The Posty composer: one post going to five accounts, with a live
+Instagram preview](docs/images/composer.png)
 
-- **Composer**: one post to many accounts, with live previews and
-  per-network character counters (X weighted counting, Bluesky graphemes).
-  - Per-account customization of text and media.
-  - Threads for X, Threads, Bluesky and Mastodon.
-  - First comment.
-  - Bold, italic and monospace through Unicode styling (networks only accept
-    plain text), an emoji picker, and hashtag/template snippets.
-- **Media**: drag-and-drop upload (images and video up to 1 GB), a media
-  library, alt text, and reordering. Media is validated per network (counts,
-  types, Instagram aspect ratio, video-only networks).
-- **Scheduling**: post now, schedule for a date and time, save drafts, or add
-  to a Buffer-style queue of weekly time slots.
-- **Calendar**: month, week and day views. Drag a post to reschedule it;
-  click an empty slot to write a post for that time.
-- **Posts**: Scheduled, Drafts, Published and Failed tabs with search,
-  account and tag filters, duplicate, retry and links to live posts.
-- **Network options**: Instagram feed/reel/story, Facebook post/reel/story,
-  Pinterest board/title/link, YouTube title/visibility, TikTok inbox or
-  direct post, Mastodon visibility and content warning.
-- **Tags** (colored on the calendar), **analytics** (daily metrics where the
-  network allows it), **multiple users**, and **failure notifications**
-  through a Slack- or Discord-compatible webhook.
+## Highlights
 
-## How it runs
+### Scheduling
 
+- **Calendar**: month and week views. Drag a post to move it, or click a day
+  to write a post for it. Tags color-code each post.
+- **Queue**: set weekly time slots once, then click *Add to queue* and Posty
+  picks the next free one.
+- **Post now, schedule or save a draft**, then find everything under
+  Scheduled, Drafts, Published and Failed.
+
+![November in the calendar, with color-tagged posts on most
+days](docs/images/calendar.png)
+
+### Posting
+
+- **One post, many accounts**, with a live preview and character counter for
+  each network.
+- **Tailor each account**: different text or media per account, threads on
+  X, Threads, Bluesky and Mastodon, and a first comment.
+- **Network options**: Instagram feed, reel or story; Pinterest board;
+  YouTube title and visibility; and more.
+- **Media checked before it goes out**: image counts, file types and
+  Instagram aspect ratios, with alt text and a media library.
+- **Safe failures**: Posty never re-posts blindly. A failed post waits for
+  you to click Retry, and can ping Slack or Discord.
+
+### Easy setup
+
+- **One command**: `docker compose up -d`. Postgres is the only dependency,
+  with no Redis and no open ports.
+- **A guide for every network**, step by step with screenshots. Bluesky and
+  Mastodon need no developer app at all.
+- **Tokens stay fresh**: the worker renews them in the background. Only
+  LinkedIn asks you to reconnect, every 60 days.
+
+![The Accounts page with eight connected accounts](docs/images/accounts.png)
+
+## Quick start
+
+You need a machine with Docker and a free [Tailscale](https://tailscale.com)
+account.
+
+> **Just trying it out?** Skip Tailscale. Run `cp .env.example .env`, set
+> `APP_URL=http://localhost:3000`, `APP_KEY`, `ADMIN_EMAIL` and
+> `ADMIN_PASSWORD`, then run
+> `docker compose -f compose.local.yml up -d --build` and open
+> <http://localhost:3000>. Instagram, Threads and Facebook video won't work
+> there.
+
+### 1. Prepare Tailscale
+
+In the [Tailscale admin console](https://login.tailscale.com/admin):
+
+1. On the **DNS** page, turn on **MagicDNS** and **HTTPS Certificates**.
+2. In **Access controls**, add the tag to your policy file:
+
+   ```json
+   "tagOwners": { "tag:posty": ["autogroup:admin"] }
+   ```
+
+3. Under **Settings → Keys**, click **Generate auth key**. Make it
+   **reusable**, add the tag `tag:posty`, and copy the key.
+
+### 2. Configure
+
+```bash
+git clone https://github.com/xcollantes/posty.git && cd posty
+cp .env.example .env
+openssl rand -base64 48   # paste the output as APP_KEY
 ```
-docker compose
-├── tailscale  sidecar: :443 → UI (tailnet only)
-├── app        Next.js UI + API (shares the sidecar's network)
-├── worker     publishes due posts, refreshes tokens, collects metrics
-└── db         Postgres (also the job queue, no Redis)
+
+Fill in these values in `.env`:
+
+| Setting             | Value                                 |
+|---------------------|---------------------------------------|
+| `APP_URL`           | `https://posty.<your-tailnet>.ts.net` |
+| `APP_KEY`           | the random string from above          |
+| `ADMIN_EMAIL`       | your email, used to sign in           |
+| `ADMIN_PASSWORD`    | a strong password                     |
+| `POSTGRES_PASSWORD` | any random string                     |
+| `TS_AUTHKEY`        | the key from step 1                   |
+
+Your tailnet name is on the DNS page of the admin console, for example
+`tail1234.ts.net`. The `posty` part comes from `TS_HOSTNAME`.
+
+### 3. Start
+
+```bash
+docker compose up -d --build
 ```
 
-Nothing on the host is public. Instagram, Threads and Facebook video fetch
-media by URL, so at publish time the worker copies the file to a private
-Google Cloud Storage bucket and hands Meta a signed URL that expires after
-an hour. A bucket lifecycle rule deletes the copies after a day.
+Open `APP_URL` from any device on your tailnet and sign in with
+`ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
-## Setup
+### 4. Set up media hosting (Instagram, Threads, Facebook video)
 
-1. **Tailscale admin console**
-   - Enable **MagicDNS** and **HTTPS certificates** (DNS page).
-   - Create an auth key: Settings → Keys → *Generate auth key*. Make it
-     reusable and tag it `tag:posty`.
-   - Allow the tag in the access controls (policy file):
+Meta fetches media by URL, so Posty needs a private Google Cloud Storage
+bucket for these three. Follow [docs/media-bucket.md](docs/media-bucket.md).
+Skip this step if you don't use them.
 
-     ```json
-     "tagOwners": { "tag:posty": ["autogroup:admin"] }
-     ```
+### 5. Connect your accounts
 
-2. **Google Cloud Storage** (only for Instagram, Threads and Facebook
-   video; skip it otherwise). With the `gcloud` CLI:
+Open **Accounts** in Posty. Bluesky and Mastodon connect right there. Every
+other network needs a developer app first:
 
-   ```bash
-   PROJECT=my-project
-   BUCKET=posty-media-$(openssl rand -hex 4)
-   SA=posty-media@$PROJECT.iam.gserviceaccount.com
+| Guide                                 | You need                          |
+|---------------------------------------|-----------------------------------|
+| [Facebook Pages](docs/facebook.md)    | a Facebook Page you manage        |
+| [Instagram](docs/instagram.md)        | a Business or Creator account     |
+| [Threads](docs/threads.md)            | a Threads profile                 |
+| [X](docs/x.md)                        | prepaid API credits               |
+| [LinkedIn](docs/linkedin.md)          | a LinkedIn Company Page           |
+| [Pinterest](docs/pinterest.md)        | a Pinterest business account      |
+| [YouTube](docs/youtube.md)            | a Google Cloud project            |
+| [TikTok](docs/tiktok.md)              | a TikTok account                  |
+| [Bluesky](docs/networks.md#bluesky)   | an app password, no developer app |
+| [Mastodon](docs/networks.md#mastodon) | your instance's name, no app      |
 
-   gcloud storage buckets create gs://$BUCKET --project=$PROJECT \
-     --location=us-west1 --uniform-bucket-level-access \
-     --public-access-prevention
-   echo '{"rule":[{"action":{"type":"Delete"},"condition":{"age":1}}]}' \
-     > lifecycle.json
-   gcloud storage buckets update gs://$BUCKET --lifecycle-file=lifecycle.json
+Each guide tells you which two keys to add to `.env`. After adding them, run
+`docker compose up -d` to restart.
 
-   gcloud iam service-accounts create posty-media --project=$PROJECT
-   gcloud storage buckets add-iam-policy-binding gs://$BUCKET \
-     --member=serviceAccount:$SA --role=roles/storage.objectAdmin
+### 6. Add queue times (optional)
 
-   mkdir -p secrets
-   gcloud iam service-accounts keys create secrets/gcs-key.json \
-     --iam-account=$SA
-   sudo chown 1000 secrets/gcs-key.json && chmod 600 secrets/gcs-key.json
-   ```
+On the **Queue** page, add the weekly times you like to post. *Add to
+queue* in the composer then fills the next free slot.
 
-   The containers run as uid 1000, so the key must be readable by it. Put
-   the bucket name in `GCS_BUCKET`.
+![The Queue page with weekday time slots and the next free
+times](docs/images/queue.png)
 
-3. **Configure**
+### Check that nothing is public
 
-   ```bash
-   cp .env.example .env
-   openssl rand -base64 48   # paste as APP_KEY
-   ```
+From a device **outside** your tailnet, this should get no answer:
 
-   Fill in `APP_URL`, `APP_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`,
-   `POSTGRES_PASSWORD`, `TS_AUTHKEY` and, from step 2, `GCS_BUCKET`. With
-   `TS_HOSTNAME=posty` and the tailnet `tail1234.ts.net`:
-
-   ```
-   APP_URL=https://posty.tail1234.ts.net
-   ```
-
-4. **Start**
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-   Open `APP_URL` from any device on your tailnet and sign in with the
-   admin email and password.
-
-5. **Connect networks**: create a developer app for each network you want
-   (see [docs/networks.md](docs/networks.md)), put its keys in `.env`, run
-   `docker compose up -d`, then use **Accounts → Connect**. Bluesky and
-   Mastodon need no keys.
-
-6. **Queue**: add weekly time slots on the **Queue** page to use "Add to
-   queue".
-
-### Check nothing is public
-
-From a machine **outside** your tailnet, `curl -I
-https://posty.tail1234.ts.net/` gets no answer. After an Instagram post,
-the worker log shows the upload; the plain object URL
-`https://storage.googleapis.com/<bucket>/<file>` returns 403.
+```bash
+curl -I https://posty.<your-tailnet>.ts.net/
+```
 
 ## Operations
 
-- **Backups**: the `pgdata` volume holds the database and the `media`
-  volume holds uploads. Back up both. `APP_KEY` decrypts the stored tokens,
-  so keep it with the backups.
+- **Back up** the `pgdata` volume (database) and the `media` volume
+  (uploads). Keep `APP_KEY` with the backups: it decrypts the stored tokens.
 - **Logs**: `docker compose logs -f worker` shows every publish attempt.
-- **Failures**: a post that fails is never re-posted blindly. Only errors
-  that happen before anything goes live (429/5xx) are retried, at most 3
-  times. A worker crash mid-publish marks the post *failed* so you can check
-  the network before retrying. A post that comes due more than an hour
-  while the worker is down is marked *failed* instead of going out late;
-  use Retry to send it.
-- **Tokens**: the worker refreshes Instagram, Threads, Pinterest, X and
-  TikTok tokens in the background. LinkedIn tokens can't be refreshed by
-  personal apps, so a banner asks you to reconnect every 60 days.
+- **Failed posts**: Posty only retries errors that happen before anything
+  goes live (rate limits and server errors), at most 3 times. If the worker
+  crashes mid-publish, or a post comes due more than an hour late because the
+  worker was down, the post is marked *failed* instead. Check the network,
+  then click **Retry**.
+- **Failure alerts**: set `NOTIFY_WEBHOOK_URL` to a Slack- or
+  Discord-compatible webhook.
+- **LinkedIn** tokens can't be renewed by personal apps. A banner asks you to
+  reconnect every 60 days.
+
+## Known limits
+
+- **X** charges per post, and more for posts with links.
+- **LinkedIn** posts to your personal profile only. Company Pages need an API
+  that LinkedIn grants only to organizations.
+- **TikTok** won't review personal apps, so direct posts stay private. Use
+  inbox mode and finish the post in the TikTok app.
+- **Pinterest** pins are visible only to you until the app gets Standard
+  access.
+- **Video** isn't transcoded. Upload files that already meet each network's
+  specs.
+- **Untested against live APIs**: the network code follows each network's
+  docs (checked 2026-11-03) and has mocked tests. Try each network with a
+  real account before relying on it.
 
 ## Development
 
@@ -157,6 +193,16 @@ npm run typecheck && npm run lint
 After editing `lib/db/schema.ts`, run `npm run db:generate` to create a
 migration.
 
+### How it runs
+
+```
+docker compose
+├── tailscale  sidecar: :443 → UI (tailnet only)
+├── app        Next.js UI + API (shares the sidecar's network)
+├── worker     publishes due posts, refreshes tokens, collects metrics
+└── db         Postgres (also the job queue, no Redis)
+```
+
 ### Layout
 
 | Path                            | What                                                     |
@@ -169,18 +215,3 @@ migration.
 | `components/composer/`          | the post editor                                          |
 | `app/(app)/`                    | pages; `app/actions/` server actions                     |
 | `tailscale/serve.json`          | Serve config for the sidecar                             |
-
-## Known limits
-
-- **X** API access is pay-per-use, and posts containing links cost more.
-- **LinkedIn** posts to your personal profile only. Company Pages need the
-  Community Management API, which is only granted to organizations.
-- **TikTok** won't audit a personal-use app, so direct posts stay private.
-  Use inbox mode and finish the post in the TikTok app.
-- **Pinterest** pins are visible only to you until the app gets Standard
-  access.
-- **Video** isn't transcoded. Upload files that already meet each network's
-  specs.
-- **Untested against live APIs**: the network code follows each network's
-  docs (checked 2026-11-03) and is covered by mocked tests. Test each
-  network with a real account before relying on it.
