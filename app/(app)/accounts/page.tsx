@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
+import { CircleAlert, CircleCheck } from "lucide-react";
 import { Avatar } from "@/components/composer/Preview";
+import { Card, Page } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { networks } from "@/lib/networks";
@@ -38,94 +40,98 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
   const soon = daysFromNow(10);
 
   return (
-    <div className="max-w-4xl">
-      <h1>Accounts</h1>
-      {typeof error === "string" && (
-        <p role="alert" className="mt-3 text-sm text-danger">
-          {error}
-        </p>
-      )}
-      {typeof connected === "string" && (
-        <p className="mt-3 text-sm text-ok">
-          Connected {connected} account{connected === "1" ? "" : "s"}.
-        </p>
-      )}
+    <Page eyebrow="Connect" title="Accounts" description="The social accounts Posty posts to.">
+      <div className="space-y-6">
+        {/* Opaque cards, not tinted ones: they can sit on the dark hero. */}
+        {typeof error === "string" && (
+          <p role="alert" className="card flex items-center gap-2 px-5 py-3 text-sm font-semibold text-danger">
+            <CircleAlert className="size-4 shrink-0" />
+            {error}
+          </p>
+        )}
+        {typeof connected === "string" && (
+          <p className="card flex items-center gap-2 px-5 py-3 text-sm font-semibold text-ok">
+            <CircleCheck className="size-4 shrink-0" />
+            Connected {connected} account{connected === "1" ? "" : "s"}.
+          </p>
+        )}
 
-      <h2 className="mt-6">Connected</h2>
-      {accounts.length === 0 ? (
-        <p className="hint mt-1">None yet. Add one below.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="data-table mt-2 min-w-[600px]">
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th>Network</th>
-                <th>Status</th>
-                <th className="w-1">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {accounts.map((a) => {
-                const info = NETWORKS[a.network as NetworkId];
-                const expiring = !networks[a.network as NetworkId].refresh && a.expiresAt && a.expiresAt < soon;
-                return (
-                  <tr key={a.socialAccountId}>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <Avatar account={{ avatar: a.avatar, name: a.name }} size={24} />
-                        <div className="leading-tight">
-                          <div>{a.name}</div>
-                          {a.username && <div className="text-xs text-muted">{a.username}</div>}
-                        </div>
-                      </div>
-                    </td>
-                    <td>{info.label}</td>
-                    <td>
-                      {a.needsReconnect ? (
-                        <span className="text-danger">Reconnect needed</span>
-                      ) : expiring ? (
-                        <span className="text-danger">Expires {fmt.format(a.expiresAt!)}</span>
-                      ) : !a.isActive ? (
-                        <span className="text-muted">Paused</span>
-                      ) : (
-                        "Active"
-                      )}
-                    </td>
-                    <td>
-                      <AccountRowActions
-                        socialAccountId={a.socialAccountId}
-                        isActive={a.isActive}
-                        reconnectHref={
-                          info.connectKind === "oauth" && a.network !== "mastodon" ? `/api/connect/${a.network}/start` : null
-                        }
-                      />
-                    </td>
+        <Card title="Connected accounts" flush className="overflow-hidden">
+          {accounts.length === 0 ? (
+            <p className="hint p-5">None yet. Add one below.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table min-w-[600px] [&_td]:align-middle">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Network</th>
+                    <th>Status</th>
+                    <th className="w-1">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                </thead>
+                <tbody>
+                  {accounts.map((a) => {
+                    const info = NETWORKS[a.network as NetworkId];
+                    const expiring = !networks[a.network as NetworkId].refresh && a.expiresAt && a.expiresAt < soon;
+                    return (
+                      <tr key={a.socialAccountId}>
+                        <td>
+                          <div className="flex items-center gap-2.5">
+                            <Avatar account={{ avatar: a.avatar, name: a.name }} size={32} />
+                            <div className="leading-tight">
+                              <div className="font-semibold">{a.name}</div>
+                              {a.username && <div className="text-xs text-muted">{a.username}</div>}
+                            </div>
+                          </div>
+                        </td>
+                        <td>{info.label}</td>
+                        <td>
+                          {a.needsReconnect ? (
+                            <span className="chip bg-danger/12 text-danger">Reconnect needed</span>
+                          ) : expiring ? (
+                            <span className="chip bg-danger/12 text-danger">Expires {fmt.format(a.expiresAt!)}</span>
+                          ) : !a.isActive ? (
+                            <span className="chip bg-soft text-muted">Paused</span>
+                          ) : (
+                            <span className="chip bg-ok/12 text-ok">Active</span>
+                          )}
+                        </td>
+                        <td>
+                          <AccountRowActions
+                            socialAccountId={a.socialAccountId}
+                            isActive={a.isActive}
+                            reconnectHref={
+                              info.connectKind === "oauth" && a.network !== "mastodon"
+                                ? `/api/connect/${a.network}/start`
+                                : null
+                            }
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
 
-      <h2 className="mt-10">Add an account</h2>
-      <p className="hint">
-        Most networks need a developer app first; docs/networks.md has the steps. Bluesky and Mastodon don&apos;t.
-      </p>
-      <table className="data-table mt-2">
-        <tbody>
-          {NETWORK_IDS.map((id) => {
-            const info = NETWORKS[id];
-            const connect = networks[id].connect;
-            return (
-              <tr key={id}>
-                <td className="w-32 font-medium">{info.label}</td>
-                <td>
+        <Card
+          title="Add an account"
+          hint={<>Most networks need a developer app first; docs/networks.md has the steps. Bluesky and Mastodon don&apos;t.</>}
+        >
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {NETWORK_IDS.map((id) => {
+              const info = NETWORKS[id];
+              const connect = networks[id].connect;
+              return (
+                <li key={id} className="space-y-2 rounded-xl border border-line p-4">
+                  <p className="font-semibold">{info.label}</p>
                   {!configured(id) ? (
-                    <p className="text-muted">
+                    <p className="text-sm text-muted">
                       Add <code>{ENV_PREFIX[id]}_CLIENT_ID</code> and <code>{ENV_PREFIX[id]}_CLIENT_SECRET</code> to
                       .env, then restart.
                     </p>
@@ -138,19 +144,19 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
                       Connect
                     </a>
                   )}
-                  {info.warning && <p className="hint mt-1">{info.warning}</p>}
+                  {info.warning && <p className="hint">{info.warning}</p>}
                   {connect.kind === "oauth" && (
-                    <details className="mt-1 text-xs text-muted">
+                    <details className="text-xs text-muted">
                       <summary className="cursor-pointer">Redirect URI</summary>
                       <code className="break-all">{redirectUriFor(id)}</code>
                     </details>
                   )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      </div>
+    </Page>
   );
 }

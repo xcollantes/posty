@@ -1,5 +1,6 @@
 "use client";
 
+import { LinkIcon, Pause, Play, RefreshCw, Unplug } from "lucide-react";
 import { useState, useTransition } from "react";
 import { connectWithForm, disconnectAccount, refreshAccount, setAccountActive } from "@/app/actions/accounts";
 
@@ -23,13 +24,13 @@ export function FormConnect({ network, fields }: { network: string; fields: Fiel
         }
       >
         {fields.map((f) => (
-          <label key={f.name} className="text-sm">
+          <label key={f.name} className="text-sm font-semibold">
             {f.label}
             <input
               name={f.name}
               type={f.type ?? "text"}
               placeholder={f.placeholder}
-              className="input mt-1 w-48"
+              className="input mt-1.5 w-48"
               autoComplete="off"
               required={!f.label.includes("optional")}
             />
@@ -56,9 +57,9 @@ export function OAuthPreForm({ network, fields }: { network: string; fields: Fie
   return (
     <form method="GET" action={`/api/connect/${network}/start`} className="flex flex-wrap items-end gap-2">
       {fields.map((f) => (
-        <label key={f.name} className="text-sm">
+        <label key={f.name} className="text-sm font-semibold">
           {f.label}
-          <input name={f.name} placeholder={f.placeholder} className="input mt-1 w-56" required />
+          <input name={f.name} placeholder={f.placeholder} className="input mt-1.5 w-56" required />
         </label>
       ))}
       <button className="btn">Connect</button>
@@ -77,11 +78,14 @@ export function AccountRowActions({
 }) {
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const toggleLabel = isActive ? "Pause" : "Resume";
   return (
-    <div className="whitespace-nowrap">
-      <div className="flex gap-3">
+    <div>
+      <div className="flex gap-0.5">
         <button
-          className="link-btn"
+          className="icon-btn"
+          aria-label="Refresh"
+          title="Refresh"
           disabled={pending}
           onClick={() =>
             start(async () => {
@@ -90,14 +94,26 @@ export function AccountRowActions({
             })
           }
         >
-          Refresh
+          <RefreshCw className="size-4" />
         </button>
-        {reconnectHref && <a href={reconnectHref}>Reconnect</a>}
-        <button className="link-btn" disabled={pending} onClick={() => start(() => setAccountActive(socialAccountId, !isActive))}>
-          {isActive ? "Pause" : "Resume"}
+        {reconnectHref && (
+          <a href={reconnectHref} className="icon-btn" aria-label="Reconnect" title="Reconnect">
+            <LinkIcon className="size-4" />
+          </a>
+        )}
+        <button
+          className="icon-btn"
+          aria-label={toggleLabel}
+          title={toggleLabel}
+          disabled={pending}
+          onClick={() => start(() => setAccountActive(socialAccountId, !isActive))}
+        >
+          {isActive ? <Pause className="size-4" /> : <Play className="size-4" />}
         </button>
         <button
-          className="danger-btn"
+          className="icon-btn icon-btn-danger"
+          aria-label="Disconnect"
+          title="Disconnect"
           disabled={pending}
           onClick={() => {
             if (window.confirm("Disconnect this account? Its scheduled posts to this account are removed.")) {
@@ -105,10 +121,10 @@ export function AccountRowActions({
             }
           }}
         >
-          Disconnect
+          <Unplug className="size-4" />
         </button>
       </div>
-      {message && <p className="mt-1 max-w-xs whitespace-normal text-xs text-danger">{message}</p>}
+      {message && <p className="mt-1 max-w-xs text-xs text-danger">{message}</p>}
     </div>
   );
 }
