@@ -29,6 +29,9 @@ over your Tailscale tailnet.
 - **Tags** (colored on the calendar), **analytics** (daily metrics where the
   network allows it), **multiple users**, and **failure notifications**
   through a Slack- or Discord-compatible webhook.
+- **MCP endpoint**: let Claude Code draft, schedule and queue posts,
+  including from your phone through Remote Control. See
+  [Use from Claude](#use-from-claude-mcp).
 
 ## How it runs
 
@@ -124,6 +127,38 @@ https://posty.tail1234.ts.net/` gets no answer. After an Instagram post,
 the worker log shows the upload; the plain object URL
 `https://storage.googleapis.com/<bucket>/<file>` returns 403.
 
+## Use from Claude (MCP)
+
+Posty serves an [MCP](https://modelcontextprotocol.io) endpoint at
+`/api/mcp`, so Claude Code (or any MCP client on your tailnet) can list
+accounts, media and posts, and save drafts, scheduled posts and queued
+posts. It can't post immediately, delete or retry; use the UI for those.
+Posts are made as the `ADMIN_EMAIL` user.
+
+1. Put a token in `.env`, then run `docker compose up -d`:
+
+   ```bash
+   openssl rand -base64 32   # paste as MCP_TOKEN
+   ```
+
+2. On a machine on your tailnet, add the server to Claude Code:
+
+   ```bash
+   claude mcp add --transport http --scope user posty \
+     https://posty.tail1234.ts.net/api/mcp \
+     --header "Authorization: Bearer <MCP_TOKEN>"
+   ```
+
+3. **From your phone**: on that machine, run `claude remote-control` (or
+   set `"remoteControlAtStartup": true` in `~/.claude/settings.json`). In
+   the Claude app, open **Code**, pick the session and ask, for example,
+   "queue a Bluesky post saying …". Claude runs on your machine, so it
+   reaches posty over the tailnet. The machine has to stay awake.
+
+Custom connectors in the Claude chat app and Claude Code cloud sessions
+connect from Anthropic's servers, which aren't on your tailnet, so they
+can't reach posty.
+
 ## Operations
 
 - **Backups**: the `pgdata` volume holds the database and the `media`
@@ -166,6 +201,8 @@ migration.
 | `lib/gcs.ts`                    | signed GCS URLs for media Meta fetches by URL            |
 | `lib/publisher.ts`, `worker.ts` | claim due posts, publish, retry, roll up, sweeps         |
 | `lib/accounts.ts`               | token storage (AES-GCM) and locked refresh               |
+| `lib/posts.ts`                  | save a post (shared by the composer and MCP)             |
+| `lib/mcp.ts`, `app/api/mcp/`    | MCP tools and endpoint for LLM clients                   |
 | `components/composer/`          | the post editor                                          |
 | `app/(app)/`                    | pages; `app/actions/` server actions                     |
 | `tailscale/serve.json`          | Serve config for the sidecar                             |
