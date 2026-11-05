@@ -15,21 +15,8 @@ API facts below were checked against official docs on 2026-11-03.
 
 ## Facebook Pages
 
-1. On developers.facebook.com, create an app with the use case **Manage
-   everything on your Page**. Keep it in **Development** mode: as the app
-   admin you can use it without App Review.
-2. Under Facebook Login → Settings, add the redirect URI. Under App Domains
-   use the full host (`posty.<tailnet>.ts.net`), never just `ts.net`.
-3. `.env`: `FACEBOOK_CLIENT_ID` = App ID, `FACEBOOK_CLIENT_SECRET` = App
-   secret.
-4. Connect, and grant the Pages you want. Each Page becomes its own account
-   with a token that doesn't expire.
-
-Notes:
-
-- Scopes: `pages_show_list`, `pages_manage_posts`, `pages_read_engagement`,
-  `pages_manage_engagement`, `business_management`, `read_insights`.
-- Limit: 30 API-published Reels per Page per day.
+Follow the step-by-step guide in [facebook.md](facebook.md). Don't skip its
+last step: posts from an unpublished app are hidden from everyone but you.
 
 ## Instagram
 
