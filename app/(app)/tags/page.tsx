@@ -1,58 +1,75 @@
 import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
+import { Trash2 } from "lucide-react";
 import { createTag, deleteTag } from "@/app/actions/library";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
+import { Card, Page } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 
 export const metadata: Metadata = { title: "Tags" };
 
+// The Instagram swatch the UI is built on, offered as tag colors.
+const SWATCH = ["#f8d948", "#ef8132", "#e9336a", "#c127bf", "#6e3cf1"];
+
 export default async function TagsPage() {
   await requireUser();
   const tags = await db.select().from(schema.tags).orderBy(asc(schema.tags.name));
   return (
-    <div className="max-w-xl">
-      <h1>Tags</h1>
-      <p className="hint mt-1">Group posts by campaign or topic. A tag&apos;s color marks its posts on the calendar.</p>
+    <Page
+      eyebrow="Library"
+      title="Tags"
+      description="Group posts by campaign or topic. A tag's color marks its posts on the calendar."
+    >
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <Card title="All tags" flush>
+          {tags.length === 0 ? (
+            <p className="p-5 text-muted">No tags yet.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {tags.map((t) => (
+                <li key={t.tagId} className="flex items-center gap-3 px-5 py-3">
+                  <span className="size-3 shrink-0 rounded-full" style={{ background: t.color }} />
+                  <span className="flex-1 font-semibold">{t.name}</span>
+                  <ActionButton
+                    action={deleteTag.bind(null, t.tagId)}
+                    label={<Trash2 className="size-4" />}
+                    title="Delete"
+                    confirm={`Delete the tag "${t.name}"?`}
+                    className="icon-btn icon-btn-danger"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
-      {tags.length === 0 ? (
-        <p className="mt-6 text-muted">No tags yet.</p>
-      ) : (
-        <table className="data-table mt-4">
-          <tbody>
-            {tags.map((t) => (
-              <tr key={t.tagId}>
-                <td className="w-6">
-                  <span className="inline-block size-3 rounded-[2px] align-middle" style={{ background: t.color }} />
-                </td>
-                <td>{t.name}</td>
-                <td className="w-1">
-                  <ActionButton action={deleteTag.bind(null, t.tagId)} label="Delete" confirm={`Delete the tag "${t.name}"?`} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <h2 className="mt-8">Add a tag</h2>
-      <ActionForm action={createTag} submitLabel="Add tag" className="mt-2 space-y-3">
-        <div className="flex items-end gap-3">
-          <label className="block flex-1 text-sm">
-            Name
-            <input name="name" className="input mt-1" required />
-          </label>
-          <label className="block text-sm">
-            Color
-            <input
-              name="color"
-              type="color"
-              defaultValue="#2563eb"
-              className="mt-1 block h-[31px] w-12 cursor-pointer rounded-[3px] border border-line bg-bg"
-            />
-          </label>
-        </div>
-      </ActionForm>
-    </div>
+        <Card title="Add a tag">
+          <ActionForm action={createTag} submitLabel="Add tag" className="space-y-4">
+            <div className="flex items-end gap-3">
+              <label className="block flex-1 text-sm font-semibold">
+                Name
+                <input name="name" className="input mt-1.5" required />
+              </label>
+              <label className="block text-sm font-semibold">
+                Color
+                <input
+                  name="color"
+                  type="color"
+                  defaultValue={SWATCH[4]}
+                  list="tag-swatch"
+                  className="mt-1.5 block h-[38px] w-14 cursor-pointer rounded-xl border border-line bg-bg p-1"
+                />
+              </label>
+              <datalist id="tag-swatch">
+                {SWATCH.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
+          </ActionForm>
+        </Card>
+      </div>
+    </Page>
   );
 }

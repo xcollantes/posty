@@ -31,15 +31,18 @@ export function ActionForm({
   );
 }
 
-/** A one-word button for a bound server action (delete, remove…). */
+/** A small button for a bound server action (delete, remove…). */
 export function ActionButton({
   action,
   label,
+  title,
   confirm,
   className = "danger-btn text-sm",
 }: {
   action: () => Promise<unknown>;
-  label: string;
+  label: React.ReactNode;
+  /** Tooltip and accessible name; required when the label is only an icon. */
+  title?: string;
   confirm?: string;
   className?: string;
 }) {
@@ -52,7 +55,9 @@ export function ActionButton({
         if (confirm && !window.confirm(confirm)) e.preventDefault();
       }}
     >
-      <button className={className}>{label}</button>
+      <button className={className} title={title} aria-label={title}>
+        {label}
+      </button>
     </form>
   );
 }

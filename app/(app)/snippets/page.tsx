@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { asc } from "drizzle-orm";
+import { Trash2 } from "lucide-react";
 import { createSnippet, deleteSnippet } from "@/app/actions/library";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
+import { Card, Page } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 
@@ -11,57 +13,60 @@ export default async function SnippetsPage() {
   await requireUser();
   const snippets = await db.select().from(schema.snippets).orderBy(asc(schema.snippets.kind), asc(schema.snippets.name));
   return (
-    <div className="max-w-3xl">
-      <h1>Snippets</h1>
-      <p className="hint mt-1">Hashtag groups and templates you can drop into a post from the composer.</p>
+    <Page
+      eyebrow="Library"
+      title="Snippets"
+      description="Hashtag groups and templates you can drop into a post from the composer."
+    >
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <Card title="Saved snippets" flush>
+          {snippets.length === 0 ? (
+            <p className="p-5 text-muted">No snippets yet.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {snippets.map((s) => (
+                <li key={s.snippetId} className="flex items-start gap-3 px-5 py-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{s.name}</span>
+                      <span className={`chip ${s.kind === "hashtags" ? "bg-link/12 text-link" : "bg-soft text-muted"}`}>
+                        {s.kind === "hashtags" ? "Hashtags" : "Template"}
+                      </span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted">{s.body}</p>
+                  </div>
+                  <ActionButton
+                    action={deleteSnippet.bind(null, s.snippetId)}
+                    label={<Trash2 className="size-4" />}
+                    title="Delete"
+                    className="icon-btn icon-btn-danger"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
-      {snippets.length === 0 ? (
-        <p className="mt-6 text-muted">No snippets yet.</p>
-      ) : (
-        <table className="data-table mt-4">
-          <thead>
-            <tr>
-              <th className="w-40">Name</th>
-              <th className="w-24">Type</th>
-              <th>Text</th>
-              <th className="w-1">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {snippets.map((s) => (
-              <tr key={s.snippetId}>
-                <td>{s.name}</td>
-                <td className="text-muted">{s.kind === "hashtags" ? "Hashtags" : "Template"}</td>
-                <td className="whitespace-pre-wrap break-words">{s.body}</td>
-                <td>
-                  <ActionButton action={deleteSnippet.bind(null, s.snippetId)} label="Delete" />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <h2 className="mt-8">Add a snippet</h2>
-      <ActionForm action={createSnippet} submitLabel="Add snippet" className="mt-2 max-w-md space-y-3">
-        <label className="block text-sm">
-          Name
-          <input name="name" className="input mt-1" required />
-        </label>
-        <label className="block text-sm">
-          Type
-          <select name="kind" className="input mt-1">
-            <option value="hashtags">Hashtags</option>
-            <option value="template">Template</option>
-          </select>
-        </label>
-        <label className="block text-sm">
-          Text
-          <textarea name="body" rows={4} className="input mt-1" required placeholder="#coffee #specialtycoffee" />
-        </label>
-      </ActionForm>
-    </div>
+        <Card title="Add a snippet">
+          <ActionForm action={createSnippet} submitLabel="Add snippet" className="space-y-4">
+            <label className="block text-sm font-semibold">
+              Name
+              <input name="name" className="input mt-1.5" required />
+            </label>
+            <label className="block text-sm font-semibold">
+              Type
+              <select name="kind" className="input mt-1.5">
+                <option value="hashtags">Hashtags</option>
+                <option value="template">Template</option>
+              </select>
+            </label>
+            <label className="block text-sm font-semibold">
+              Text
+              <textarea name="body" rows={4} className="input mt-1.5" required placeholder="#coffee #specialtycoffee" />
+            </label>
+          </ActionForm>
+        </Card>
+      </div>
+    </Page>
   );
 }
