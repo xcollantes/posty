@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PREFIXES = ["/login", "/media/", "/api/health", "/_next/", "/favicon.ico"];
+// /api/mcp checks its own bearer token.
+const PUBLIC_PREFIXES = ["/login", "/media/", "/api/health", "/api/mcp", "/_next/", "/favicon.ico"];
 
 /**
  * Optimistic auth gate. Real session checks happen in requireUser(); this
