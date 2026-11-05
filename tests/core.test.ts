@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { decrypt, encrypt, hashPassword, sign, unsign, verifyPassword } from "@/lib/crypto";
+import { bearerOk, decrypt, encrypt, hashPassword, sign, unsign, verifyPassword } from "@/lib/crypto";
 import { MEDIA_NAME_RE, parseRange } from "@/lib/media";
 import { findFacets } from "@/lib/networks/bluesky";
 import { NETWORKS, validatePart } from "@/lib/networks/catalog";
@@ -78,6 +78,16 @@ describe("crypto", () => {
     const hash = await hashPassword("correct horse");
     expect(await verifyPassword("correct horse", hash)).toBe(true);
     expect(await verifyPassword("wrong", hash)).toBe(false);
+  });
+  it("checks MCP bearer tokens and fails closed", () => {
+    expect(bearerOk("Bearer s3cret", "s3cret")).toBe(true);
+    expect(bearerOk("bearer s3cret", "s3cret")).toBe(true);
+    expect(bearerOk("Bearer wrong", "s3cret")).toBe(false);
+    expect(bearerOk("Bearer s3cret-but-longer", "s3cret")).toBe(false);
+    expect(bearerOk("s3cret", "s3cret")).toBe(false);
+    expect(bearerOk(null, "s3cret")).toBe(false);
+    expect(bearerOk("Bearer ", "")).toBe(false);
+    expect(bearerOk("Bearer x", undefined)).toBe(false);
   });
 });
 
