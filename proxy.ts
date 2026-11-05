@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PREFIXES = ["/login", "/media/", "/api/health", "/_next/", "/favicon.ico"];
+const PUBLIC_PREFIXES = ["/login", "/media/", "/api/health", "/_next/", "/favicon.ico", "/icon"];
 
 /**
  * Optimistic auth gate. Real session checks happen in requireUser(); this
