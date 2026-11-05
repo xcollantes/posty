@@ -126,6 +126,7 @@ export const tiktok: Network = {
           response_type: "code",
           redirect_uri: ctx.redirectUri,
           state: ctx.state,
+          disable_auto_auth: "1", // always show the auth page, so the account can be switched
         }),
       };
     },

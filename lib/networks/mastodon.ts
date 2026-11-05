@@ -50,6 +50,7 @@ export const mastodon: Network = {
           state: ctx.state,
           code_challenge: pkceChallenge(ctx.codeVerifier),
           code_challenge_method: "S256",
+          force_login: "true", // lets a 2nd account on the same instance sign in
         }),
         data: { instance },
       };
