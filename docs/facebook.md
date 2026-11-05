@@ -5,7 +5,7 @@ developer app that you own. You create the app once, copy its ID and secret
 into `.env`, and then connect as many Pages as you manage.
 
 Instagram uses a separate app with Instagram Login, so don't add any
-Instagram use case here. See [Instagram](networks.md#instagram).
+Instagram use case here. See [Instagram](instagram.md).
 
 Dashboard paths were checked on 2026-11-04. Meta moves menus around; if one
 isn't where this guide says, look for the same words nearby.
@@ -44,6 +44,9 @@ isn't where this guide says, look for the same words nearby.
    for character.
 3. Click **Save changes**.
 
+![Facebook Login for Business settings with the Posty callback in Valid
+OAuth Redirect URIs](images/meta-redirect-uri.png)
+
 A tailnet-only host works here: the redirect happens in your browser, and
 Meta never calls Posty directly.
 
@@ -56,6 +59,9 @@ Meta never calls Posty directly.
    tailnet host isn't public, so host the policy somewhere else, for
    example on a GitHub Pages site.
 4. Click **Save changes**.
+
+![App settings, Basic: App ID, App secret, App domains and Privacy policy
+URL](images/meta-app-settings.png)
 
 ## 5. Copy the credentials into Posty
 
@@ -81,7 +87,11 @@ under **App settings** → **Advanced** doesn't matter.
 1. In the left sidebar, open **Use cases** and click **Customize** on
    **Manage everything on your Page**. (Some dashboard versions list
    permissions under **Publish** instead.)
-2. Add each permission below. Some are already added by default.
+2. Click **Add** next to each permission below. Added ones show **Ready for
+   testing**, and some are added by default.
+
+   ![Customize use case: each permission has an Add button, and added ones
+   show Ready for testing](images/meta-permissions.png)
 
 | Permission                | What Posty uses it for                        |
 |---------------------------|-----------------------------------------------|
@@ -95,8 +105,8 @@ under **App settings** → **Advanced** doesn't matter.
 Posty asks for all six when you connect. If one is missing from the app,
 Facebook's login dialog fails with **Invalid Scopes** and names it.
 
-Mixpost's guide also adds `pages_manage_metadata` and an Instagram use
-case. Posty uses neither, so skip them.
+Skip `pages_manage_metadata` and any Instagram use case. Posty uses
+neither.
 
 ## 7. Connect and test
 
@@ -130,7 +140,7 @@ first.
 
 - 30 API-published Reels per Page per day.
 - Meta fetches videos, reels and video stories by URL, so set `GCS_BUCKET`
-  first (see the [README](../README.md#setup)). Photos are uploaded
+  first (see [media-bucket.md](media-bucket.md)). Photos are uploaded
   directly and don't need it.
 
 ## Troubleshooting
