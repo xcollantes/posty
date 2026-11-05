@@ -52,6 +52,22 @@ Instagram, Threads and Facebook video also need the
 API details in these guides were checked against each network's docs on
 2026-11-03.
 
+## Multiple accounts
+
+Every network can have several accounts: click Connect again for each one.
+
+- **YouTube, Instagram, TikTok, Mastodon**: Posty asks the network to show
+  its login or account picker each time, so you can pick another account.
+- **X, LinkedIn, Pinterest, Threads**: these use whichever account this
+  browser is signed in to. Switch accounts (or sign out) on that site
+  first. If you get the same account back, the Accounts page says so.
+- **Facebook**: one connect adds every Page you grant. To add Pages later,
+  Connect again and select them in the dialog.
+- **Bluesky**: enter the other handle and its app password.
+- In Meta **Development** mode, every extra Instagram or Threads account
+  needs its own tester role on the app, the same way you added your first
+  one ([Instagram](instagram.md), [Threads](threads.md)).
+
 ## Bluesky
 
 No developer app needed.
