@@ -27,7 +27,7 @@ Instagram, Threads and Facebook video also need the
    you back to this address. Find it on Posty's **Accounts** page: open
    **Redirect URI** in the network's row and copy it.
 
-   ![The Redirect URI under the Facebook Page row on the Accounts
+   ![The Redirect URI in the Facebook Page card on the Accounts
    page](images/posty-redirect-uri.png)
 
    It looks like this, and must match character for character:
