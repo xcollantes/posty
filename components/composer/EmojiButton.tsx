@@ -1,5 +1,6 @@
 "use client";
 
+import { Smile } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 /** Emoji picker using the `emoji-picker-element` web component. */
@@ -28,10 +29,22 @@ export function EmojiButton({ onPick }: { onPick: (emoji: string) => void }) {
 
   return (
     <div className="relative">
-      <button type="button" className="link-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        Emoji
+      <button
+        type="button"
+        className="icon-btn"
+        aria-label="Emoji"
+        title="Emoji"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Smile className="size-4" />
       </button>
-      {open && <div ref={holder} className="absolute left-0 top-full z-30 mt-1 border border-line" />}
+      {open && (
+        <div
+          ref={holder}
+          className="absolute left-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-line shadow-xl"
+        />
+      )}
     </div>
   );
 }

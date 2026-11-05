@@ -1,14 +1,16 @@
 "use client";
 
+import { CalendarClock, ChevronDown, Copy, ListPlus, Save, Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { duplicatePost, savePost, type SavePostInput } from "@/app/actions/posts";
+import { Card } from "@/components/ui";
 import type { PostPart } from "@/lib/db/schema";
 import { maxCharsFor, NETWORKS, validatePart, type OptionField } from "@/lib/networks/catalog";
 import { extractUrls } from "@/lib/text";
 import { PartsEditor, type Counter } from "./PartsEditor";
-import { Preview } from "./Preview";
+import { Avatar, Preview } from "./Preview";
 import type {
   ComposerAccount,
   ComposerInitial,
@@ -150,21 +152,26 @@ export function Composer({ accounts, library, snippets, tags, initial, nextSlot,
 
   if (readOnly) {
     return (
-      <div className="max-w-2xl">
-        <p>This post has already gone out, so it can&apos;t be edited. You can copy it into a new draft.</p>
-        <button
-          className="btn-primary mt-3"
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              const id = await duplicatePost(initial.postId!);
-              if (id) router.push(`/compose/${id}`);
-            })
-          }
-        >
-          Duplicate as draft
-        </button>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="space-y-6">
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p>This post has already gone out, so it can&apos;t be edited. You can copy it into a new draft.</p>
+            <button
+              className="btn-primary"
+              disabled={pending}
+              onClick={() =>
+                startTransition(async () => {
+                  const id = await duplicatePost(initial.postId!);
+                  if (id) router.push(`/compose/${id}`);
+                })
+              }
+            >
+              <Copy className="size-4" />
+              Duplicate as draft
+            </button>
+          </div>
+        </Card>
+        <div className="grid gap-4 sm:grid-cols-2">
           {selectedAccounts.map((a) => (
             <Preview key={a.socialAccountId} account={a} parts={effective(a.socialAccountId)} media={media} />
           ))}
@@ -174,6 +181,7 @@ export function Composer({ accounts, library, snippets, tags, initial, nextSlot,
   }
 
   const goLabel = when === "queue" ? "Add to queue" : when === "now" ? "Post now" : "Schedule";
+  const GoIcon = when === "queue" ? ListPlus : when === "now" ? Send : CalendarClock;
   const slotLabel = nextSlot
     ? new Intl.DateTimeFormat("en", {
         weekday: "short",
@@ -186,48 +194,48 @@ export function Composer({ accounts, library, snippets, tags, initial, nextSlot,
     : "";
 
   return (
-    <div className="grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_19rem]">
-      <div className="min-w-0 space-y-8">
-        <section>
-          <h2 className="mb-2">Post to</h2>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      <div className="min-w-0 space-y-6">
+        <Card title="Post to">
           {accounts.length === 0 ? (
             <p className="text-muted">
               No accounts connected yet. <Link href="/accounts">Connect one</Link> first.
             </p>
           ) : (
-            <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+            <div className="flex flex-wrap gap-2">
               {accounts.map((a) => (
-                <label key={a.socialAccountId} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+                <label key={a.socialAccountId} className="pill-check">
                   <input
                     type="checkbox"
                     checked={selected.includes(a.socialAccountId)}
                     onChange={() => toggle(a.socialAccountId)}
                   />
+                  <Avatar account={a} size={22} />
                   {NETWORKS[a.network].label}
-                  <span className="text-muted">{a.name}</span>
-                  {a.needsReconnect && <span className="text-danger">(reconnect)</span>}
+                  <span className="font-normal text-muted">{a.name}</span>
+                  {a.needsReconnect && <span className="chip bg-danger/12 text-danger">reconnect</span>}
                 </label>
               ))}
             </div>
           )}
-        </section>
+        </Card>
 
-        <PartsEditor
-          parts={parts}
-          update={(fn) => setParts(fn)}
-          allowThread={selectedAccounts.length > 0 && selectedAccounts.every((a) => NETWORKS[a.network].threads)}
-          media={media}
-          onMedia={addMedia}
-          library={library}
-          snippets={snippets}
-          counters={counterFor(selectedAccounts.filter((a) => !overrides[a.socialAccountId]))}
-        />
+        <Card>
+          <PartsEditor
+            parts={parts}
+            update={(fn) => setParts(fn)}
+            allowThread={selectedAccounts.length > 0 && selectedAccounts.every((a) => NETWORKS[a.network].threads)}
+            media={media}
+            onMedia={addMedia}
+            library={library}
+            snippets={snippets}
+            counters={counterFor(selectedAccounts.filter((a) => !overrides[a.socialAccountId]))}
+          />
+        </Card>
 
         {selectedAccounts.length > 0 && (
-          <section>
-            <h2>Per account</h2>
-            <p className="hint mb-2">Change the text for one account, or set its options.</p>
-            <div className="border-t border-line">
+          <Card title="Per account" hint="Change the text for one account, or set its options." flush>
+            <div className="divide-y divide-line">
               {selectedAccounts.map((a) => (
                 <AccountPanel
                   key={a.socialAccountId}
@@ -258,15 +266,14 @@ export function Composer({ accounts, library, snippets, tags, initial, nextSlot,
                 </AccountPanel>
               ))}
             </div>
-          </section>
+          </Card>
         )}
 
         {tags.length > 0 && (
-          <section>
-            <h2 className="mb-2">Tags</h2>
-            <div className="flex flex-wrap gap-x-6 gap-y-1.5">
+          <Card title="Tags">
+            <div className="flex flex-wrap gap-2">
               {tags.map((t) => (
-                <label key={t.tagId} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+                <label key={t.tagId} className="pill-check">
                   <input
                     type="checkbox"
                     checked={tagIds.includes(t.tagId)}
@@ -274,30 +281,29 @@ export function Composer({ accounts, library, snippets, tags, initial, nextSlot,
                       setTagIds((ids) => (ids.includes(t.tagId) ? ids.filter((x) => x !== t.tagId) : [...ids, t.tagId]))
                     }
                   />
-                  <span className="inline-block size-2.5 rounded-[2px]" style={{ background: t.color }} />
+                  <span className="size-2.5 rounded-full" style={{ background: t.color }} />
                   {t.name}
                 </label>
               ))}
             </div>
-          </section>
+          </Card>
         )}
 
-        <section>
-          <h2 className="mb-2">When</h2>
-          <div className="space-y-2 text-sm">
+        <Card title="When">
+          <div className="space-y-2">
             {nextSlot && (
-              <label className="flex cursor-pointer items-center gap-2">
+              <label className="pill-check flex rounded-xl">
                 <input type="radio" name="when" checked={when === "queue"} onChange={() => setWhen("queue")} />
-                Next queue slot <span className="text-muted">{slotLabel}</span>
+                Next queue slot <span className="font-normal text-muted">{slotLabel}</span>
               </label>
             )}
-            <label className="flex cursor-pointer flex-wrap items-center gap-2">
+            <label className="pill-check flex flex-wrap rounded-xl">
               <input type="radio" name="when" checked={when === "time"} onChange={() => setWhen("time")} />
               On
               <input
                 type="datetime-local"
                 aria-label="Date and time"
-                className="input w-auto py-0.5"
+                className="input w-auto py-1"
                 value={time}
                 onChange={(e) => {
                   setTime(e.target.value);
@@ -305,64 +311,67 @@ export function Composer({ accounts, library, snippets, tags, initial, nextSlot,
                 }}
               />
             </label>
-            <label className="flex cursor-pointer items-center gap-2">
+            <label className="pill-check flex rounded-xl">
               <input type="radio" name="when" checked={when === "now"} onChange={() => setWhen("now")} />
               Now
             </label>
           </div>
-        </section>
 
-        {(errors.length > 0 || reconnect.length > 0 || notes.length > 0) && selected.length > 0 && (
-          <div className="space-y-1 text-sm" aria-live="polite">
-            {errors.map((e) => (
-              <p key={e} className="text-danger">
-                {e}
-              </p>
-            ))}
-            {reconnect.map((a) => (
-              <p key={a.socialAccountId} className="text-danger">
-                {a.name} ({NETWORKS[a.network].label}) needs to be reconnected before it can post.
-              </p>
-            ))}
-            {notes.map((n) => (
-              <p key={n} className="text-muted">
-                {n}
-              </p>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={pending || selected.length === 0 || errors.length > 0}
-            onClick={() => submit(false)}
-          >
-            {pending ? "Saving…" : goLabel}
-          </button>
-          <button type="button" className="btn" disabled={pending} onClick={() => submit(true)}>
-            Save as draft
-          </button>
-          {error && (
-            <p role="alert" className="whitespace-pre-line text-sm text-danger">
-              {error}
-            </p>
+          {(errors.length > 0 || reconnect.length > 0 || notes.length > 0) && selected.length > 0 && (
+            <div className="mt-4 space-y-1 rounded-xl bg-soft p-3 text-sm" aria-live="polite">
+              {errors.map((e) => (
+                <p key={e} className="text-danger">
+                  {e}
+                </p>
+              ))}
+              {reconnect.map((a) => (
+                <p key={a.socialAccountId} className="text-danger">
+                  {a.name} ({NETWORKS[a.network].label}) needs to be reconnected before it can post.
+                </p>
+              ))}
+              {notes.map((n) => (
+                <p key={n} className="text-muted">
+                  {n}
+                </p>
+              ))}
+            </div>
           )}
-        </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-5">
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={pending || selected.length === 0 || errors.length > 0}
+              onClick={() => submit(false)}
+            >
+              <GoIcon className="size-4" />
+              {pending ? "Saving…" : goLabel}
+            </button>
+            <button type="button" className="btn" disabled={pending} onClick={() => submit(true)}>
+              <Save className="size-4" />
+              Save as draft
+            </button>
+            {error && (
+              <p role="alert" className="whitespace-pre-line text-sm text-danger">
+                {error}
+              </p>
+            )}
+          </div>
+        </Card>
       </div>
 
       <aside className="min-w-0 lg:sticky lg:top-6 lg:self-start">
-        <h2 className="mb-2">Preview</h2>
-        {selectedAccounts.length === 0 ? (
-          <p className="hint">Pick an account to see the post as it will look there.</p>
-        ) : (
-          <div className="space-y-4">
-            {selectedAccounts.map((a) => (
-              <Preview key={a.socialAccountId} account={a} parts={effective(a.socialAccountId)} media={media} />
-            ))}
-          </div>
-        )}
+        <Card title="Preview">
+          {selectedAccounts.length === 0 ? (
+            <p className="hint">Pick an account to see the post as it will look there.</p>
+          ) : (
+            <div className="space-y-4">
+              {selectedAccounts.map((a) => (
+                <Preview key={a.socialAccountId} account={a} parts={effective(a.socialAccountId)} media={media} />
+              ))}
+            </div>
+          )}
+        </Card>
       </aside>
     </div>
   );
@@ -388,13 +397,16 @@ function AccountPanel({
   // Open by default when something needs filling in; afterwards only the user toggles it.
   const [open, setOpen] = useState(missing || custom);
   return (
-    <details className="border-b border-line py-2" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary className="cursor-pointer text-sm">
-        {info.label} <span className="text-muted">{account.name}</span>
-        {custom && <span className="text-muted"> · own text</span>}
-        {missing && <span className="text-danger"> · needs details</span>}
+    <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-5 py-3 text-sm [&::-webkit-details-marker]:hidden">
+        <Avatar account={account} size={22} />
+        <span className="font-semibold">{info.label}</span>
+        <span className="text-muted">{account.name}</span>
+        {custom && <span className="chip bg-link/12 text-link">own text</span>}
+        {missing && <span className="chip bg-danger/12 text-danger">needs details</span>}
+        <ChevronDown className="ml-auto size-4 text-muted transition-transform group-open:rotate-180" />
       </summary>
-      <div className="mb-2 mt-3 space-y-4 pl-4">
+      <div className="space-y-4 px-5 pb-5 pt-1">
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input type="checkbox" checked={custom} onChange={(e) => onCustom(e.target.checked)} />
           Use different text and media for this account
@@ -425,9 +437,9 @@ function OptionInput({
     : (field.choices ?? []);
   return (
     <div className="max-w-md text-sm">
-      <label htmlFor={id} className="mb-1 block">
+      <label htmlFor={id} className="mb-1.5 block font-semibold">
         {field.label}
-        {field.required && <span className="text-muted"> (required)</span>}
+        {field.required && <span className="font-normal text-muted"> (required)</span>}
       </label>
       {field.type === "select" ? (
         <select id={id} className="input" value={value} onChange={(e) => onChange(e.target.value)}>

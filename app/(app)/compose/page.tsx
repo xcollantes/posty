@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Composer } from "@/components/composer/Composer";
+import { Page } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { composerData } from "./data";
 
@@ -10,8 +11,7 @@ export default async function NewPostPage({ searchParams }: PageProps<"/compose"
   const { at, account } = await searchParams;
   const data = await composerData(user.timezone);
   return (
-    <div>
-      <h1 className="mb-6">New post</h1>
+    <Page eyebrow="Create" title="New post">
       <Composer
         {...data}
         initial={{
@@ -25,6 +25,6 @@ export default async function NewPostPage({ searchParams }: PageProps<"/compose"
           scheduledAt: typeof at === "string" && !Number.isNaN(Date.parse(at)) ? at : null,
         }}
       />
-    </div>
+    </Page>
   );
 }

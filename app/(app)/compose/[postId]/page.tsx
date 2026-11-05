@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { Composer } from "@/components/composer/Composer";
+import { Page } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { composerData, mediaForIds } from "../data";
@@ -28,8 +29,10 @@ export default async function EditPostPage({ params }: PageProps<"/compose/[post
   const readOnly = post.status === "published" || post.status === "partial";
 
   return (
-    <div>
-      <h1 className="mb-6">{readOnly ? "Post" : post.status === "draft" ? "Edit draft" : "Edit post"}</h1>
+    <Page
+      eyebrow={readOnly ? "Published" : "Create"}
+      title={readOnly ? "Post" : post.status === "draft" ? "Edit draft" : "Edit post"}
+    >
       <Composer
         {...data}
         library={[...extra, ...data.library]}
@@ -46,6 +49,6 @@ export default async function EditPostPage({ params }: PageProps<"/compose/[post
           scheduledAt: post.scheduledAt?.toISOString() ?? null,
         }}
       />
-    </div>
+    </Page>
   );
 }
