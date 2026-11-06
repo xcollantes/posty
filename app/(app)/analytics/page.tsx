@@ -1,68 +1,18 @@
 import type { Metadata } from "next";
-import { desc, eq, sql } from "drizzle-orm";
 import { ChartColumn } from "lucide-react";
 import { Card, Page } from "@/components/ui";
+import { publishedWithMetrics, sumTotals, totalsByNetwork } from "@/lib/analytics";
 import { requireUser } from "@/lib/auth";
-import { db, schema } from "@/lib/db";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
 
 export const metadata: Metadata = { title: "Analytics" };
 
-// null = the network never reported this number (shown as a dash, not 0).
-type Totals = { posts: number; views: number | null; likes: number | null; comments: number | null; shares: number | null };
-const add = (a: number | null, b: number | null) => (b === null ? a : (a ?? 0) + b);
-
 export default async function AnalyticsPage() {
   const user = await requireUser();
-  // Latest metrics snapshot per published target.
-  const latest = db
-    .selectDistinctOn([schema.postMetrics.postTargetId])
-    .from(schema.postMetrics)
-    .orderBy(schema.postMetrics.postTargetId, desc(schema.postMetrics.fetchedAt))
-    .as("latest");
-  const rows = await db
-    .select({
-      postTargetId: schema.postTargets.postTargetId,
-      url: schema.postTargets.url,
-      publishedAt: schema.postTargets.publishedAt,
-      network: schema.socialAccounts.network,
-      account: schema.socialAccounts.name,
-      text: sql<string>`${schema.posts.content}->'parts'->0->>'text'`,
-      views: latest.views,
-      likes: latest.likes,
-      comments: latest.comments,
-      shares: latest.shares,
-      clicks: latest.clicks,
-    })
-    .from(schema.postTargets)
-    .innerJoin(schema.posts, eq(schema.posts.postId, schema.postTargets.postId))
-    .innerJoin(schema.socialAccounts, eq(schema.socialAccounts.socialAccountId, schema.postTargets.socialAccountId))
-    .leftJoin(latest, eq(latest.postTargetId, schema.postTargets.postTargetId))
-    .where(eq(schema.postTargets.status, "published"))
-    .orderBy(desc(schema.postTargets.publishedAt))
-    .limit(200);
-
-  const totals = new Map<string, Totals>();
-  for (const r of rows) {
-    const t = totals.get(r.network) ?? { posts: 0, views: null, likes: null, comments: null, shares: null };
-    t.posts++;
-    t.views = add(t.views, r.views);
-    t.likes = add(t.likes, r.likes);
-    t.comments = add(t.comments, r.comments);
-    t.shares = add(t.shares, r.shares);
-    totals.set(r.network, t);
-  }
+  const rows = await publishedWithMetrics({ limit: 200 });
+  const totals = totalsByNetwork(rows);
   // Across every network, for the stat cards.
-  const all = [...totals.values()].reduce<Totals>(
-    (s, t) => ({
-      posts: s.posts + t.posts,
-      views: add(s.views, t.views),
-      likes: add(s.likes, t.likes),
-      comments: add(s.comments, t.comments),
-      shares: add(s.shares, t.shares),
-    }),
-    { posts: 0, views: null, likes: null, comments: null, shares: null },
-  );
+  const all = sumTotals(totals.values());
   const fmt = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: user.timezone });
   const num = (v: number | null) => (v === null ? <span className="text-muted">–</span> : v.toLocaleString("en"));
   const label = (network: string) => NETWORKS[network as NetworkId]?.label ?? network;
