@@ -1,12 +1,13 @@
 "use client";
 
-import { CalendarDays, ChartColumn, Clock, Hash, ImageIcon, LayoutList, Settings, Tag, Users } from "lucide-react";
+import { CalendarDays, ChartColumn, Clock, Hash, ImageIcon, LayoutList, Lightbulb, Settings, Tag, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
   ["/calendar", "Calendar", CalendarDays],
   ["/posts", "Posts", LayoutList],
+  ["/ideas", "Ideas", Lightbulb],
   ["/queue", "Queue", Clock],
   ["/media-library", "Media", ImageIcon],
   ["/accounts", "Accounts", Users],

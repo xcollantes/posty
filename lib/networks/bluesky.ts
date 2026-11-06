@@ -144,7 +144,8 @@ async function buildEmbed(acct: Account, pds: string, part: Part): Promise<Recor
       $type: "app.bsky.embed.video",
       video: await uploadVideo(acct, pds, video),
       alt: video.altText || undefined,
-      aspectRatio: { width: video.width ?? 16, height: video.height ?? 9 },
+      // Reason: files added over MCP have no dimensions, and a guess distorts the player.
+      ...(video.width && video.height ? { aspectRatio: { width: video.width, height: video.height } } : {}),
     };
   }
   if (images.length) {

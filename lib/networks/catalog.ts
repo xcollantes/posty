@@ -352,6 +352,31 @@ export function deviantArtTags(raw = ""): string[] {
     .filter(Boolean);
 }
 
+/** The parts of an account's meta safe to show. The rest can hold secrets. */
+export function safeMeta(meta: Record<string, unknown>): Record<string, unknown> {
+  const safe = ["boards", "maxChars", "maxMedia", "subscriptionType", "handle"];
+  return Object.fromEntries(Object.entries(meta).filter(([k]) => safe.includes(k)));
+}
+
+/**
+ * Options a network wouldn't understand. Publishers read only the keys they
+ * know, so a typo like `privacy` on Mastodon would silently post publicly.
+ */
+export function optionErrors(id: NetworkId, options: Record<string, string>): string[] {
+  const { label, options: fields } = NETWORKS[id];
+  return Object.entries(options).flatMap(([key, value]) => {
+    const field = fields.find((f) => f.key === key);
+    if (!field) {
+      const valid = fields.map((f) => f.key).join(", ") || "none";
+      return [`${label}: unknown option "${key}" (valid: ${valid})`];
+    }
+    if (field.choices && !field.choices.some((c) => c.value === value)) {
+      return [`${label}: ${key} must be one of ${field.choices.map((c) => c.value).join(", ")}`];
+    }
+    return [];
+  });
+}
+
 export type MediaLike = { kind: "image" | "video"; mime: string; width: number | null; height: number | null };
 
 /** Problems with a post part for a network, as human-readable strings. */

@@ -1,11 +1,9 @@
 import { and, asc, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import type { NetworkId } from "@/lib/networks/catalog";
+import { safeMeta, type NetworkId } from "@/lib/networks/catalog";
 import { nextFreeSlot } from "@/lib/queue";
 import { rowToMedia } from "@/components/composer/media";
 import type { ComposerAccount, ComposerMedia } from "@/components/composer/types";
-
-const SAFE_META = ["boards", "maxChars", "maxMedia", "subscriptionType", "handle"];
 
 /** Everything the composer needs. `postId` is the post being edited, if any. */
 export async function composerData(timezone: string, postId?: string) {
@@ -42,7 +40,7 @@ export async function composerData(timezone: string, postId?: string) {
         avatar: a.avatar,
         needsReconnect: a.needsReconnect,
         // Never ship tokens or encrypted secrets to the browser.
-        meta: Object.fromEntries(Object.entries(a.meta).filter(([k]) => SAFE_META.includes(k))),
+        meta: safeMeta(a.meta),
       }),
     ),
     library: mediaRows.map(rowToMedia),

@@ -4,17 +4,19 @@ import { and, between, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
-import { savePostAs, type ActionResult, type SavePostInput } from "@/lib/posts";
+import { deletePostChecked, retryFailedTargets, savePostAs, type ActionResult, type SavePostInput } from "@/lib/posts";
 
 export type { ActionResult, SavePostInput, TargetInput } from "@/lib/posts";
 
 export async function savePost(input: SavePostInput): Promise<ActionResult> {
-  return savePostAs(await requireUser(), input);
+  const result = await savePostAs(await requireUser(), input);
+  if (result.ok) revalidatePath("/", "layout");
+  return result;
 }
 
 export async function deletePost(postId: string) {
   await requireUser();
-  await db.delete(schema.posts).where(eq(schema.posts.postId, postId));
+  await deletePostChecked(postId);
   revalidatePath("/", "layout");
 }
 
@@ -50,14 +52,7 @@ export async function duplicatePost(postId: string): Promise<string | null> {
 /** Re-queue failed targets now. Published targets are left alone. */
 export async function retryPost(postId: string) {
   await requireUser();
-  await db
-    .update(schema.postTargets)
-    .set({ status: "pending", attemptCount: 0, nextAttemptAt: null, error: null })
-    .where(and(eq(schema.postTargets.postId, postId), eq(schema.postTargets.status, "failed")));
-  await db
-    .update(schema.posts)
-    .set({ status: "scheduled", scheduledAt: new Date(), updatedAt: new Date() })
-    .where(eq(schema.posts.postId, postId));
+  await retryFailedTargets(postId);
   revalidatePath("/", "layout");
 }
 

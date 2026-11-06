@@ -34,8 +34,11 @@ days](docs/images/calendar.png)
   Instagram aspect ratios, with alt text and a media library.
 - **Safe failures**: Posty never re-posts blindly. A failed post waits for
   you to click Retry, and can ping Slack or Discord.
-- **Post from Claude**: Claude Code can draft, schedule and queue posts over
-  MCP, even from your phone. See [Use from Claude](#use-from-claude-mcp).
+- **Ideas board**: keep rough text and images in columns, then turn one into
+  a post when it's ready.
+- **Post from Claude**: Claude Code can upload images, write and schedule
+  posts and manage your ideas over MCP, even from your phone. See
+  [Use from Claude](#use-from-claude-mcp).
 
 ### Easy setup
 
@@ -152,10 +155,40 @@ curl -I https://posty.<your-tailnet>.ts.net/
 ## Use from Claude (MCP)
 
 Posty serves an [MCP](https://modelcontextprotocol.io) endpoint at
-`/api/mcp`, so Claude Code (or any MCP client on your tailnet) can list
-accounts, media and posts, and save drafts, scheduled posts and queued
-posts. It can't post immediately, delete or retry; use the UI for those.
-Posts are made as the `ADMIN_EMAIL` user.
+`/api/mcp`, so Claude Code (or any MCP client on your tailnet) can do most of
+what the UI does. Posts are made as the `ADMIN_EMAIL` user.
+
+| Area     | Tools                                                                 |
+|----------|-----------------------------------------------------------------------|
+| Accounts | `list_accounts` (limits, options, queue, tags and the current time)   |
+| Posts    | `list_posts`, `get_post`, `create_post`, `edit_post`                  |
+| Going out | `publish_post`, `retry_post`, `delete_post`                          |
+| Media    | `list_media`, `upload_media_from_url`, `get_media_upload_url`, `update_media`, `delete_media` |
+| Metrics  | `get_post_metrics`                                                    |
+| Snippets | `list_snippets`, `create_snippet`, `update_snippet`, `delete_snippet` |
+| Queue    | `add_queue_slots`, `delete_queue_slot`                                |
+| Ideas    | `list_ideas`, `create_idea`, `update_idea`, `delete_idea`, `list_idea_groups`, `create_idea_group`, `delete_idea_group` |
+
+`publish_post`, `retry_post` and the delete tools are marked destructive, and
+are separate from `create_post`, so you can auto-allow drafting and still be
+asked before anything goes live now. A schedule a minute away has the same
+effect, so treat this as a convenience, not a security boundary.
+
+Connecting accounts, tags and settings stay in the UI.
+
+### Images and files
+
+- **From the web**: `upload_media_from_url` downloads a public URL. It refuses
+  private addresses, including your tailnet.
+- **From your machine**: `get_media_upload_url` returns a `curl` command that
+  works for 15 minutes. Claude runs it with your file's path and gets a
+  `mediaId` back.
+
+Both take JPEG, PNG, WebP, GIF, MP4 or MOV, up to 1 GB. The type is read from
+the file itself. Videos added this way have no dimensions or duration on
+record, because only the browser can read those.
+
+### Setup
 
 1. Put a token in `.env`, then run `docker compose up -d`:
 
@@ -248,6 +281,9 @@ docker compose
 | `lib/publisher.ts`, `worker.ts` | claim due posts, publish, retry, roll up, sweeps         |
 | `lib/accounts.ts`               | token storage (AES-GCM) and locked refresh               |
 | `lib/posts.ts`                  | save a post (shared by the composer and MCP)             |
+| `lib/ideas.ts`                  | the Ideas board                                          |
+| `lib/analytics.ts`              | metrics queries and totals                               |
+| `lib/fetch-remote.ts`           | download a URL without reaching internal addresses       |
 | `lib/mcp.ts`, `app/api/mcp/`    | MCP tools and endpoint for LLM clients                   |
 | `components/composer/`          | the post editor                                          |
 | `app/(app)/`                    | pages; `app/actions/` server actions                     |

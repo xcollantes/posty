@@ -1,5 +1,4 @@
-import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { CurrentUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import type { PostContent, PostPart } from "@/lib/db/schema";
@@ -29,7 +28,7 @@ const cleanParts = (parts: PostPart[]): PostPart[] =>
     .map((p) => ({ text: String(p.text ?? ""), mediaIds: (p.mediaIds ?? []).map(String).slice(0, 35) }))
     .filter((p, i) => i === 0 || p.text.trim() || p.mediaIds.length);
 
-async function validateTargets(targets: TargetInput[], parts: PostPart[]): Promise<string[]> {
+export async function validateTargets(targets: TargetInput[], parts: PostPart[]): Promise<string[]> {
   const ids = targets.map((t) => t.socialAccountId);
   const accounts = ids.length
     ? await db.select().from(schema.socialAccounts).where(inArray(schema.socialAccounts.socialAccountId, ids))
@@ -53,17 +52,12 @@ async function validateTargets(targets: TargetInput[], parts: PostPart[]): Promi
   return [...new Set(errors)];
 }
 
-async function resolveSchedule(input: SavePostInput, timezone: string, postId?: string): Promise<Date | null> {
-  if (input.mode === "now") return new Date();
-  if (input.mode === "draft") return input.scheduledAt ? new Date(input.scheduledAt) : null;
-  if (input.mode === "schedule") {
-    const at = input.scheduledAt ? new Date(input.scheduledAt) : null;
-    if (!at || Number.isNaN(at.getTime())) throw new Error("Pick a date and time");
-    return at;
-  }
-  const slots = await db.select().from(schema.queueSlots);
-  if (!slots.length) throw new Error("Your queue has no time slots yet: add some on the Queue page");
-  const taken = await db
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Next queue slot no other post holds. `postId` is the post being moved, if any. */
+export async function nextQueueSlot(timezone: string, postId?: string, conn: typeof db | Tx = db): Promise<Date | null> {
+  const slots = await conn.select().from(schema.queueSlots);
+  const taken = await conn
     .select({ at: schema.posts.scheduledAt })
     .from(schema.posts)
     .where(
@@ -73,9 +67,39 @@ async function resolveSchedule(input: SavePostInput, timezone: string, postId?: 
         postId ? ne(schema.posts.postId, postId) : undefined,
       ),
     );
-  const at = nextFreeSlot(slots, taken.map((r) => r.at!), timezone);
-  if (!at) throw new Error("No free queue slot in the next 12 weeks");
-  return at;
+  return nextFreeSlot(slots, taken.map((r) => r.at!), timezone);
+}
+
+async function resolveSchedule(input: SavePostInput, timezone: string, postId: string | undefined, tx: Tx): Promise<Date | null> {
+  if (input.mode === "now") return new Date();
+  if (input.mode === "draft") return input.scheduledAt ? new Date(input.scheduledAt) : null;
+  if (input.mode === "schedule") {
+    const at = input.scheduledAt ? new Date(input.scheduledAt) : null;
+    if (!at || Number.isNaN(at.getTime())) throw new Error("Pick a date and time");
+    return at;
+  }
+  // Reason: otherwise posts queued at the same moment all see the same free slot.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('posty:queue'))`);
+  const at = await nextQueueSlot(timezone, postId, tx);
+  if (at) return at;
+  const slots = await tx.select().from(schema.queueSlots);
+  throw new Error(
+    slots.length ? "No free queue slot in the next 12 weeks" : "Your queue has no time slots yet: add some on the Queue page",
+  );
+}
+
+/**
+ * Lock a post's targets, so claimDue (SKIP LOCKED) can't take them while the
+ * post changes. Throws if the worker already has one.
+ */
+async function lockTargets(tx: Tx, postId: string) {
+  const targets = await tx
+    .select({ status: schema.postTargets.status, providerPostId: schema.postTargets.providerPostId })
+    .from(schema.postTargets)
+    .where(eq(schema.postTargets.postId, postId))
+    .for("update");
+  if (targets.some((t) => t.status === "publishing")) throw new Error("This post is publishing right now");
+  return targets;
 }
 
 /**
@@ -90,6 +114,11 @@ export async function savePostAs(user: CurrentUser, input: SavePostInput): Promi
     const targets = (input.targets ?? []).filter((t, i, all) =>
       all.findIndex((o) => o.socialAccountId === t.socialAccountId) === i,
     );
+    // Reason: publishing skips ids it can't find, so a bad one would post without its file.
+    const mediaIds = [...new Set([...parts, ...targets.flatMap((t) => t.override?.parts ?? [])].flatMap((p) => p.mediaIds))];
+    const found = new Set((await loadMedia(mediaIds)).map((m) => m.mediaId));
+    const missing = mediaIds.filter((id) => !found.has(id));
+    if (missing.length) return { ok: false, error: `Unknown media: ${missing.join(", ")}` };
     if (input.mode !== "draft") {
       if (!targets.length) return { ok: false, error: "Choose at least one account" };
       const errors = await validateTargets(targets, parts);
@@ -102,19 +131,21 @@ export async function savePostAs(user: CurrentUser, input: SavePostInput): Promi
       if (existing.status === "published" || existing.status === "partial") {
         return { ok: false, error: "This post already went out. Duplicate it to post again." };
       }
-      const inFlight = await db
-        .select({ id: schema.postTargets.postTargetId })
-        .from(schema.postTargets)
-        .where(and(eq(schema.postTargets.postId, input.postId), eq(schema.postTargets.status, "publishing")));
-      if (inFlight.length) return { ok: false, error: "This post is publishing right now" };
     }
 
-    const scheduledAt = await resolveSchedule(input, user.timezone, input.postId);
     const status = input.mode === "draft" ? "draft" : "scheduled";
     const content: PostContent = { parts };
 
-    const postId = await db.transaction(async (tx) => {
+    return await db.transaction(async (tx) => {
       let id = input.postId;
+      if (id) {
+        // Reason: saving re-creates every target, which would publish live ones again.
+        const current = await lockTargets(tx, id);
+        if (current.some((t) => t.status === "published" || t.providerPostId)) {
+          throw new Error("Part of this post already went out. Duplicate it to post again.");
+        }
+      }
+      const scheduledAt = await resolveSchedule(input, user.timezone, id, tx);
       if (id) {
         await tx
           .update(schema.posts)
@@ -144,12 +175,67 @@ export async function savePostAs(user: CurrentUser, input: SavePostInput): Promi
       if (input.tagIds?.length) {
         await tx.insert(schema.postTags).values(input.tagIds.map((tagId) => ({ postId: id!, tagId })));
       }
-      return id!;
+      return { ok: true, postId: id!, scheduledAt: scheduledAt?.toISOString() ?? null };
     });
-
-    revalidatePath("/", "layout");
-    return { ok: true, postId, scheduledAt: scheduledAt?.toISOString() ?? null };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
   }
+}
+
+/** A post in the shape savePostAs takes, for saving it again with changes. */
+export async function loadPost(postId: string) {
+  const [post] = await db.select().from(schema.posts).where(eq(schema.posts.postId, postId));
+  if (!post) return null;
+  const [targets, tags] = await Promise.all([
+    db.select().from(schema.postTargets).where(eq(schema.postTargets.postId, postId)),
+    db.select().from(schema.postTags).where(eq(schema.postTags.postId, postId)),
+  ]);
+  return {
+    status: post.status,
+    scheduledAt: post.scheduledAt?.toISOString() ?? null,
+    parts: post.content.parts,
+    targets: targets.map(
+      (t): TargetInput => ({ socialAccountId: t.socialAccountId, override: t.contentOverride ?? null, options: t.options }),
+    ),
+    tagIds: tags.map((t) => t.tagId),
+  };
+}
+
+/** Delete a post's record. What's already live on a network stays there. */
+export async function deletePostChecked(postId: string): Promise<{ error?: string }> {
+  try {
+    const deleted = await db.transaction(async (tx) => {
+      // Reason: a post deleted mid-publish goes live with no record of it here.
+      await lockTargets(tx, postId);
+      return tx.delete(schema.posts).where(eq(schema.posts.postId, postId)).returning({ postId: schema.posts.postId });
+    });
+    return deleted.length ? {} : { error: "Post not found" };
+  } catch (err) {
+    return { error: (err as Error).message };
+  }
+}
+
+/** Re-queue failed targets now. Published targets are left alone. */
+export async function retryFailedTargets(postId: string): Promise<{ error?: string }> {
+  const [post] = await db.select({ status: schema.posts.status }).from(schema.posts).where(eq(schema.posts.postId, postId));
+  // Reason: this sets the post to go out now, which on a draft would publish it.
+  if (post?.status !== "failed" && post?.status !== "partial") return { error: "Only failed posts can be retried" };
+  await db
+    .update(schema.postTargets)
+    .set({ status: "pending", attemptCount: 0, nextAttemptAt: null, error: null })
+    .where(and(eq(schema.postTargets.postId, postId), eq(schema.postTargets.status, "failed")));
+  await db
+    .update(schema.posts)
+    .set({ status: "scheduled", scheduledAt: new Date(), updatedAt: new Date() })
+    .where(eq(schema.posts.postId, postId));
+  return {};
+}
+
+/** Tag ids for these names, creating any that don't exist yet. */
+export async function tagIdsFor(names: string[]): Promise<string[]> {
+  const clean = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+  if (!clean.length) return [];
+  await db.insert(schema.tags).values(clean.map((name) => ({ name }))).onConflictDoNothing();
+  const rows = await db.select({ tagId: schema.tags.tagId }).from(schema.tags).where(inArray(schema.tags.name, clean));
+  return rows.map((r) => r.tagId);
 }

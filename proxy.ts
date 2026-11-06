@@ -27,5 +27,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  // Reason: Next buffers proxied bodies and silently cuts them off at 10 MB,
+  // so uploads must skip the proxy. The route repeats the Funnel rule above.
+  matcher: ["/((?!_next/static|_next/image|api/media$).*)"],
 };
