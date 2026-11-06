@@ -49,6 +49,7 @@ const limit = (fallback: number) => z.number().int().min(1).max(100).default(fal
 const offset = z.number().int().min(0).default(0);
 const altText = z.string().max(MAX_ALT_TEXT).optional().describe("Describes the file for people using screen readers");
 const tagNames = z.array(z.string().min(1).max(100));
+const workspace = { workspaceId: z.uuid().describe("From list_workspaces") };
 
 const part = z.object({ text: z.string(), mediaIds: z.array(z.uuid()).default([]) });
 const target = z.object({
@@ -169,14 +170,32 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
   }
 
   server.registerTool(
+    "list_workspaces",
+    {
+      description:
+        "Start here. Each company has its own workspace, with its own accounts, posts, ideas, media, tags, snippets and " +
+        "queue. Most tools take a workspaceId. If there's more than one and it isn't clear which the user means, ask.",
+      annotations: READ_ONLY,
+    },
+    async () =>
+      json(
+        await db
+          .select({ workspaceId: schema.workspaces.workspaceId, name: schema.workspaces.name })
+          .from(schema.workspaces)
+          .orderBy(asc(schema.workspaces.name)),
+      ),
+  );
+
+  server.registerTool(
     "list_accounts",
     {
       description:
-        "Start here. Returns the user, their timezone and the current local time, every connected account with its " +
-        "character and media limits and valid options (including Pinterest boards), the posting queue, and existing tags.",
+        "Returns the user, their timezone and the current local time, and this workspace's connected accounts with their " +
+        "character and media limits and valid options (including Pinterest boards), its posting queue, and its tags.",
+      inputSchema: z.object(workspace),
       annotations: READ_ONLY,
     },
-    async () => {
+    async ({ workspaceId }) => {
       const [accounts, slots, tags, nextSlot] = await Promise.all([
         // Reason: named columns, so tokens can never end up in a response.
         db
@@ -190,10 +209,15 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
             meta: schema.socialAccounts.meta,
           })
           .from(schema.socialAccounts)
+          .where(eq(schema.socialAccounts.workspaceId, workspaceId))
           .orderBy(asc(schema.socialAccounts.network), asc(schema.socialAccounts.name)),
-        db.select().from(schema.queueSlots).orderBy(asc(schema.queueSlots.dayOfWeek), asc(schema.queueSlots.time)),
-        db.select({ name: schema.tags.name }).from(schema.tags).orderBy(asc(schema.tags.name)),
-        nextQueueSlot(user.timezone),
+        db
+          .select()
+          .from(schema.queueSlots)
+          .where(eq(schema.queueSlots.workspaceId, workspaceId))
+          .orderBy(asc(schema.queueSlots.dayOfWeek), asc(schema.queueSlots.time)),
+        db.select({ name: schema.tags.name }).from(schema.tags).where(eq(schema.tags.workspaceId, workspaceId)).orderBy(asc(schema.tags.name)),
+        nextQueueSlot(workspaceId, user.timezone),
       ]);
       return json({
         user: { name: user.name, email: user.email },
@@ -242,6 +266,7 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
         "List posts, with each account's status, live URL and error. Filter by status, accounts, tags and dates. " +
         "Set includeMetrics only when asked about performance. For totals, use get_post_metrics.",
       inputSchema: z.object({
+        ...workspace,
         status: z.array(z.enum(["draft", "scheduled", "published", "partial", "failed"])).optional(),
         accountIds: z.array(z.uuid()).optional(),
         tags: tagNames.optional(),
@@ -260,6 +285,7 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
     async (args) => {
       const { posts, postTargets, postTags, tags } = schema;
       const conditions: (SQL | undefined)[] = [
+        eq(posts.workspaceId, args.workspaceId),
         args.status?.length ? inArray(posts.status, args.status) : undefined,
         args.accountIds?.length
           ? inArray(
@@ -328,6 +354,7 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
         "anything you omit comes from the idea, and the idea leaves the board once the post is saved. " +
         "Errors come back as text: fix the input and call again.",
       inputSchema: z.object({
+        ...workspace,
         parts: z.array(part).min(1).optional(),
         targets: z.array(target).optional(),
         tags: tagNames.optional().describe("Tag names. New names are created"),
@@ -336,9 +363,10 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
         ideaId: z.uuid().optional(),
       }),
     },
-    async ({ parts, targets, tags, mode, scheduledAt, ideaId }) => {
+    async ({ workspaceId, parts, targets, tags, mode, scheduledAt, ideaId }) => {
       const idea = ideaId ? await ideaPostInput(ideaId) : null;
       if (ideaId && !idea) return fail("Idea not found");
+      if (idea && idea.workspaceId !== workspaceId) return fail("That idea is in another workspace");
       const content = parts ?? idea?.parts;
       if (!content) return fail("Pass parts, or ideaId to use an idea's content");
       const problems = await targetProblems(targets ?? []);
@@ -347,9 +375,10 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
       const problem = nextMode === "schedule" ? scheduleProblem(scheduledAt) : null;
       if (problem) return fail(problem);
       const result = await save({
+        workspaceId,
         parts: content,
         targets: targets ? toTargets(targets) : (idea?.targets ?? []),
-        tagIds: tags ? await tagIdsFor(tags) : (idea?.tagIds ?? []),
+        tagIds: tags ? await tagIdsFor(tags, workspaceId) : (idea?.tagIds ?? []),
         mode: nextMode,
         scheduledAt,
       });
@@ -385,10 +414,11 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
       const problem = nextMode === "schedule" ? scheduleProblem(at) : null;
       if (problem) return fail(problem);
       return save({
+        workspaceId: post.workspaceId,
         postId,
         parts: parts ?? post.parts,
         targets: targets ? toTargets(targets) : post.targets,
-        tagIds: tags ? await tagIdsFor(tags) : post.tagIds,
+        tagIds: tags ? await tagIdsFor(tags, post.workspaceId) : post.tagIds,
         mode: nextMode,
         scheduledAt: at,
       });
@@ -410,7 +440,7 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
       if (post.status !== "draft" && post.status !== "scheduled") {
         return fail(`This post is ${post.status}. Only drafts and scheduled posts can be published; use retry_post for failed ones.`);
       }
-      return save({ postId, parts: post.parts, targets: post.targets, tagIds: post.tagIds, mode: "now" });
+      return save({ workspaceId: post.workspaceId, postId, parts: post.parts, targets: post.targets, tagIds: post.tagIds, mode: "now" });
     },
   );
 
@@ -468,6 +498,7 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
         "from the last 30 days. null means the network never reported that number, not zero. LinkedIn shares none, and " +
         "X only when X_METRICS is on.",
       inputSchema: z.object({
+        ...workspace,
         from: iso,
         to: iso,
         accountIds: z.array(z.uuid()).optional(),
@@ -475,11 +506,15 @@ function registerPostTools(server: McpServer, user: CurrentUser) {
       }),
       annotations: READ_ONLY,
     },
-    async ({ from, to, accountIds, tags }) => {
+    async ({ workspaceId, from, to, accountIds, tags }) => {
       const tagRows = tags?.length
-        ? await db.select({ tagId: schema.tags.tagId }).from(schema.tags).where(inArray(schema.tags.name, tags))
+        ? await db
+            .select({ tagId: schema.tags.tagId })
+            .from(schema.tags)
+            .where(and(eq(schema.tags.workspaceId, workspaceId), inArray(schema.tags.name, tags)))
         : null;
       const rows = await publishedWithMetrics({
+        workspaceId,
         from: new Date(from),
         to: new Date(to),
         accountIds: accountIds?.length ? accountIds : undefined,
@@ -504,11 +539,17 @@ function registerMediaTools(server: McpServer) {
     {
       description:
         "List files in the media library, newest first. Use a mediaId in a post's parts. To see an image, download its url.",
-      inputSchema: z.object({ limit: limit(30), offset }),
+      inputSchema: z.object({ ...workspace, limit: limit(30), offset }),
       annotations: READ_ONLY,
     },
-    async ({ limit: count, offset: skip }) => {
-      const rows = await db.select().from(schema.media).orderBy(desc(schema.media.createdAt)).limit(count).offset(skip);
+    async ({ workspaceId, limit: count, offset: skip }) => {
+      const rows = await db
+        .select()
+        .from(schema.media)
+        .where(eq(schema.media.workspaceId, workspaceId))
+        .orderBy(desc(schema.media.createdAt))
+        .limit(count)
+        .offset(skip);
       return json({
         media: rows.map((r) => ({ ...mediaOut(toItem(r)), originalName: r.originalName, createdAt: r.createdAt })),
         nextOffset: rows.length === count ? skip + count : null,
@@ -522,12 +563,12 @@ function registerMediaTools(server: McpServer) {
       description:
         "Add a JPEG, PNG, WebP, GIF, MP4 or MOV to the media library from a public URL, and get its mediaId. The URL must " +
         "point directly at the file, not a page showing it. For a file on this machine, use get_media_upload_url.",
-      inputSchema: z.object({ url: z.url(), altText }),
+      inputSchema: z.object({ ...workspace, url: z.url(), altText }),
     },
-    async ({ url, altText: alt }) => {
+    async ({ workspaceId, url, altText: alt }) => {
       try {
         const { body, name } = await fetchRemote(url);
-        return json(mediaOut(toItem(await saveUpload({ body, originalName: name, altText: alt }))));
+        return json(mediaOut(toItem(await saveUpload({ workspaceId, body, originalName: name, altText: alt }))));
       } catch (err) {
         const message = (err as Error).message;
         return fail(message.startsWith("Unsupported") ? `${message}. The URL must point directly at the file, not a page.` : message);
@@ -541,10 +582,10 @@ function registerMediaTools(server: McpServer) {
       description:
         "Upload a file from this machine: get a short-lived URL and a curl command, run the command with your file's " +
         "path, and read the mediaId from its JSON output. Takes JPEG, PNG, WebP, GIF, MP4 or MOV, up to 1 GB.",
-      inputSchema: z.object({ fileName: z.string().min(1).max(200), altText }),
+      inputSchema: z.object({ ...workspace, fileName: z.string().min(1).max(200), altText }),
     },
-    async ({ fileName, altText: alt }) => {
-      const uploadUrl = `${appUrl()}/api/media?token=${encodeURIComponent(createUploadGrant(fileName, alt))}`;
+    async ({ workspaceId, fileName, altText: alt }) => {
+      const uploadUrl = `${appUrl()}/api/media?token=${encodeURIComponent(createUploadGrant(workspaceId, fileName, alt))}`;
       return json({
         uploadUrl,
         expiresInSeconds: UPLOAD_GRANT_SECONDS,
@@ -587,14 +628,14 @@ function registerLibraryTools(server: McpServer) {
     "list_snippets",
     {
       description: "List saved hashtag groups and post templates, with their full text.",
-      inputSchema: z.object({ kind: snippetKind.optional() }),
+      inputSchema: z.object({ ...workspace, kind: snippetKind.optional() }),
       annotations: READ_ONLY,
     },
-    async ({ kind }) => {
+    async ({ workspaceId, kind }) => {
       const rows = await db
         .select()
         .from(schema.snippets)
-        .where(kind ? eq(schema.snippets.kind, kind) : undefined)
+        .where(and(eq(schema.snippets.workspaceId, workspaceId), kind ? eq(schema.snippets.kind, kind) : undefined))
         .orderBy(asc(schema.snippets.kind), asc(schema.snippets.name));
       return json(rows.map(snippetOut));
     },
@@ -604,7 +645,7 @@ function registerLibraryTools(server: McpServer) {
     "create_snippet",
     {
       description: "Save a hashtag group or post template. It also shows up in the composer.",
-      inputSchema: z.object({ kind: snippetKind, name: z.string().min(1).max(200), body: z.string().min(1) }),
+      inputSchema: z.object({ ...workspace, kind: snippetKind, name: z.string().min(1).max(200), body: z.string().min(1) }),
     },
     async (values) => {
       const [row] = await db.insert(schema.snippets).values(values).returning();
@@ -647,17 +688,18 @@ function registerLibraryTools(server: McpServer) {
     "add_queue_slots",
     {
       description:
-        "Add weekly times to the posting queue, which mode=queue fills in order. Applies to all accounts. list_accounts " +
-        "shows the current slots.",
+        "Add weekly times to this workspace's posting queue, which mode=queue fills in order. list_accounts shows the " +
+        "current slots.",
       inputSchema: z.object({
+        ...workspace,
         days: z.array(z.number().int().min(0).max(6)).min(1).describe("0 is Sunday"),
         time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).describe("HH:MM in the user's timezone"),
       }),
     },
-    async ({ days, time }) => {
+    async ({ workspaceId, days, time }) => {
       const rows = await db
         .insert(schema.queueSlots)
-        .values([...new Set(days)].map((dayOfWeek) => ({ dayOfWeek, time })))
+        .values([...new Set(days)].map((dayOfWeek) => ({ workspaceId, dayOfWeek, time })))
         .returning();
       return json(rows);
     },
@@ -693,18 +735,18 @@ function registerLibraryTools(server: McpServer) {
 
   server.registerTool(
     "list_idea_groups",
-    { description: "List the columns on the Ideas board.", annotations: READ_ONLY },
-    async () => json((await listIdeaGroups()).map(({ ideaGroupId, name }) => ({ ideaGroupId, name }))),
+    { description: "List the columns on the Ideas board.", inputSchema: z.object(workspace), annotations: READ_ONLY },
+    async ({ workspaceId }) => json((await listIdeaGroups(workspaceId)).map(({ ideaGroupId, name }) => ({ ideaGroupId, name }))),
   );
 
   server.registerTool(
     "create_idea_group",
     {
       description: "Add a column to the Ideas board. If one with this name exists, returns it.",
-      inputSchema: z.object({ name: z.string().min(1).max(100) }),
+      inputSchema: z.object({ ...workspace, name: z.string().min(1).max(100) }),
     },
-    async ({ name }) => {
-      const { ideaGroupId, name: saved } = await createIdeaGroup(name);
+    async ({ workspaceId, name }) => {
+      const { ideaGroupId, name: saved } = await createIdeaGroup(workspaceId, name);
       return json({ ideaGroupId, name: saved });
     },
   );
@@ -727,6 +769,7 @@ function registerLibraryTools(server: McpServer) {
         "List ideas on the board, most recently changed first. Ideas are rough content for later: nothing on the board " +
         "gets published. Use create_post with ideaId to turn one into a post.",
       inputSchema: z.object({
+        ...workspace,
         ideaGroupId: z.uuid().nullable().optional().describe("Only this column. null is Unsorted"),
         tags: tagNames.optional().describe("Ideas with any of these tags"),
         includeUntagged: z.boolean().optional().describe("With tags, also return ideas that have no tags"),
@@ -748,7 +791,7 @@ function registerLibraryTools(server: McpServer) {
     "create_idea",
     {
       description: "Save an idea on the board for later. Needs at least a title, text or a file. This doesn't schedule anything.",
-      inputSchema: z.object(ideaFields),
+      inputSchema: z.object({ ...workspace, ...ideaFields }),
     },
     async (input) => {
       const result = await saveIdea(input);
@@ -786,7 +829,8 @@ export function buildServer(user: CurrentUser): McpServer {
     {
       instructions: [
         `Posty schedules social media posts. The user's timezone is ${user.timezone}.`,
-        "Call list_accounts first: it has the account IDs, each account's limits and valid options, and the current time.",
+        "Each company has its own workspace. Call list_workspaces first and never mix them up: if it isn't clear which one the user means, ask.",
+        "Then call list_accounts with that workspaceId: it has the account IDs, each account's limits and valid options, and the current time.",
         "Never guess IDs. Default to mode=draft unless the user asked to schedule, queue or publish.",
         "Files: use upload_media_from_url for a public URL. For a file on this machine, call get_media_upload_url and run the curl command it returns. Both give a mediaId to put in a post's parts. Always write alt text.",
         "Times: scheduledAt is ISO 8601 with a UTC offset and must be in the future. Work out relative times like 'tomorrow' from list_accounts' now.",

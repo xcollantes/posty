@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { db, schema } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/crypto";
@@ -39,16 +39,21 @@ async function avatarDataUri(url: string | null | undefined): Promise<string | n
  * Insert or update accounts returned by a connect flow. `refreshed` counts
  * accounts that were already connected, i.e. the provider reused the
  * browser's sign-in instead of letting the user pick another account.
+ * `elsewhere` counts accounts left untouched because they're in another
+ * workspace: Facebook and YouTube return everything the login manages, so a
+ * reconnect must not pull in, or unpause, another company's accounts.
  */
-export async function saveConnected(network: string, accounts: ConnectedAccount[]) {
+export async function saveConnected(network: string, accounts: ConnectedAccount[], workspaceId: string) {
   const ids = accounts.map((a) => a.providerAccountId);
   const existing = ids.length
     ? await db
-        .select({ id: schema.socialAccounts.providerAccountId })
+        .select({ id: schema.socialAccounts.providerAccountId, workspaceId: schema.socialAccounts.workspaceId })
         .from(schema.socialAccounts)
         .where(and(eq(schema.socialAccounts.network, network), inArray(schema.socialAccounts.providerAccountId, ids)))
     : [];
+  const elsewhere = new Set(existing.filter((e) => e.workspaceId !== workspaceId).map((e) => e.id));
   for (const a of accounts) {
+    if (elsewhere.has(a.providerAccountId)) continue;
     const values = {
       network,
       providerAccountId: a.providerAccountId,
@@ -65,13 +70,39 @@ export async function saveConnected(network: string, accounts: ConnectedAccount[
     };
     await db
       .insert(schema.socialAccounts)
-      .values(values)
+      .values({ ...values, workspaceId })
       .onConflictDoUpdate({
         target: [schema.socialAccounts.network, schema.socialAccounts.providerAccountId],
         set: values,
       });
   }
-  return { added: accounts.length - existing.length, refreshed: existing.length };
+  return {
+    added: accounts.length - existing.length,
+    refreshed: existing.length - elsewhere.size,
+    elsewhere: elsewhere.size,
+  };
+}
+
+/**
+ * Move an account to another workspace. Refused while unpublished posts use it,
+ * since a post can't target another workspace's account. Published and failed
+ * posts stay where they were written.
+ */
+export async function moveAccountTo(socialAccountId: string, workspaceId: string): Promise<{ error?: string }> {
+  const [{ n }] = await db
+    .select({ n: count() })
+    .from(schema.postTargets)
+    .where(
+      and(
+        eq(schema.postTargets.socialAccountId, socialAccountId),
+        inArray(schema.postTargets.status, ["pending", "publishing"]),
+      ),
+    );
+  if (n) {
+    return { error: `${n} draft or scheduled post${n === 1 ? " still uses" : "s still use"} this account. Publish, edit or delete them first.` };
+  }
+  await db.update(schema.socialAccounts).set({ workspaceId }).where(eq(schema.socialAccounts.socialAccountId, socialAccountId));
+  return {};
 }
 
 async function applyTokens(tx: Pick<typeof db, "update">, row: Row, t: TokenSet) {

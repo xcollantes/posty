@@ -36,6 +36,9 @@ days](docs/images/calendar.png)
   you to click Retry, and can ping Slack or Discord.
 - **Ideas board**: keep rough text and images in columns, then turn one into
   a post when it's ready.
+- **Workspaces**: run several companies from one install. Each gets its own
+  accounts, posts, ideas, media, tags, snippets and queue, with a switcher in
+  the header. Add them in **Settings**.
 - **Post from Claude**: Claude Code can upload images, write and schedule
   posts and manage your ideas over MCP, even from your phone. See
   [Use from Claude](#use-from-claude-mcp).
@@ -156,10 +159,13 @@ curl -I https://posty.<your-tailnet>.ts.net/
 
 Posty serves an [MCP](https://modelcontextprotocol.io) endpoint at
 `/api/mcp`, so Claude Code (or any MCP client on your tailnet) can do most of
-what the UI does. Posts are made as the `ADMIN_EMAIL` user.
+what the UI does. Posts are made as the `ADMIN_EMAIL` user. Tools that list
+or create things take a `workspaceId` from `list_workspaces`, so Claude can't
+post to the wrong company by default.
 
 | Area     | Tools                                                                 |
 |----------|-----------------------------------------------------------------------|
+| Workspaces | `list_workspaces`                                                   |
 | Accounts | `list_accounts` (limits, options, queue, tags and the current time)   |
 | Posts    | `list_posts`, `get_post`, `create_post`, `edit_post`                  |
 | Going out | `publish_post`, `retry_post`, `delete_post`                          |
@@ -174,7 +180,7 @@ are separate from `create_post`, so you can auto-allow drafting and still be
 asked before anything goes live now. A schedule a minute away has the same
 effect, so treat this as a convenience, not a security boundary.
 
-Connecting accounts, tags and settings stay in the UI.
+Connecting accounts, tags, workspaces and settings stay in the UI.
 
 ### Images and files
 
@@ -231,6 +237,9 @@ can't reach posty.
 
 ## Known limits
 
+- **Workspaces** organise your data but don't protect it: everyone who can log
+  in can open every workspace. The open workspace is per browser, not per tab,
+  so two tabs follow whichever switched last.
 - **X** charges per post, and more for posts with links.
 - **LinkedIn** posts to your personal profile only. Company Pages need an API
   that LinkedIn grants only to organizations.
@@ -282,6 +291,7 @@ docker compose
 | `lib/accounts.ts`               | token storage (AES-GCM) and locked refresh               |
 | `lib/posts.ts`                  | save a post (shared by the composer and MCP)             |
 | `lib/ideas.ts`                  | the Ideas board                                          |
+| `lib/workspaces.ts`             | which workspace this browser has open                    |
 | `lib/analytics.ts`              | metrics queries and totals                               |
 | `lib/fetch-remote.ts`           | download a URL without reaching internal addresses       |
 | `lib/mcp.ts`, `app/api/mcp/`    | MCP tools and endpoint for LLM clients                   |

@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import { Composer } from "@/components/composer/Composer";
 import { Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
+import { requireWorkspace } from "@/lib/workspaces";
 import { composerData } from "./data";
 
 export const metadata: Metadata = { title: "New post" };
 
 export default async function NewPostPage({ searchParams }: PageProps<"/compose">) {
-  const user = await requireUser();
+  const { user, workspaceId } = await requireWorkspace();
   const { at, account } = await searchParams;
-  const data = await composerData(user.timezone);
+  const data = await composerData(workspaceId, user.timezone);
   return (
     <Page title="New post">
       <Composer

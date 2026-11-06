@@ -3,7 +3,7 @@ import { mkdir, open, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { sign, unsign } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
@@ -69,7 +69,19 @@ export async function loadMedia(ids: string[]): Promise<MediaItem[]> {
   return ids.flatMap((id) => (byId.has(id) ? [toItem(byId.get(id)!)] : []));
 }
 
+/** Which of these ids aren't files in this workspace. */
+export async function unknownMedia(ids: string[], workspaceId: string): Promise<string[]> {
+  if (!ids.length) return [];
+  const rows = await db
+    .select({ id: schema.media.mediaId })
+    .from(schema.media)
+    .where(and(inArray(schema.media.mediaId, ids), eq(schema.media.workspaceId, workspaceId)));
+  const found = new Set(rows.map((r) => r.id));
+  return ids.filter((id) => !found.has(id));
+}
+
 type UploadInput = {
+  workspaceId: string;
   body: ReadableStream<Uint8Array>;
   originalName: string;
   altText?: string;
@@ -149,6 +161,7 @@ export async function saveUpload(input: UploadInput): Promise<Row> {
     const [row] = await db
       .insert(schema.media)
       .values({
+        workspaceId: input.workspaceId,
         mediaId,
         fileName,
         originalName: input.originalName.slice(0, 200),
@@ -178,12 +191,12 @@ export const UPLOAD_GRANT_SECONDS = 15 * 60;
  * clients that can run curl but have no cookie.
  * ponytail: reusable until it expires; store used grants if that ever matters.
  */
-export const createUploadGrant = (name: string, altText = "") =>
-  sign({ purpose: UPLOAD_PURPOSE, name, altText }, UPLOAD_GRANT_SECONDS);
+export const createUploadGrant = (workspaceId: string, name: string, altText = "") =>
+  sign({ purpose: UPLOAD_PURPOSE, workspaceId, name, altText }, UPLOAD_GRANT_SECONDS);
 
 /** The grant in `token`, or null. `purpose` keeps out tokens signed for anything else. */
-export function readUploadGrant(token: string | null): { name: string; altText: string } | null {
-  const grant = unsign<{ purpose?: string; name: string; altText: string }>(token ?? undefined);
+export function readUploadGrant(token: string | null): { workspaceId: string; name: string; altText: string } | null {
+  const grant = unsign<{ purpose?: string; workspaceId: string; name: string; altText: string }>(token ?? undefined);
   return grant?.purpose === UPLOAD_PURPOSE ? grant : null;
 }
 

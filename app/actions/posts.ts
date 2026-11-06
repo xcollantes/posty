@@ -1,10 +1,11 @@
 "use server";
 
-import { and, between, eq, sql } from "drizzle-orm";
+import { and, between, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { deletePostChecked, retryFailedTargets, savePostAs, type ActionResult, type SavePostInput } from "@/lib/posts";
+import { activeWorkspaceId } from "@/lib/workspaces";
 
 export type { ActionResult, SavePostInput, TargetInput } from "@/lib/posts";
 
@@ -25,12 +26,27 @@ export async function duplicatePost(postId: string): Promise<string | null> {
   const user = await requireUser();
   const [post] = await db.select().from(schema.posts).where(eq(schema.posts.postId, postId));
   if (!post) return null;
-  const targets = await db.select().from(schema.postTargets).where(eq(schema.postTargets.postId, postId));
+  // Reason: an account moved since is another company's now, so the copy doesn't target it.
+  const targets = await db
+    .select()
+    .from(schema.postTargets)
+    .where(
+      and(
+        eq(schema.postTargets.postId, postId),
+        inArray(
+          schema.postTargets.socialAccountId,
+          db
+            .select({ id: schema.socialAccounts.socialAccountId })
+            .from(schema.socialAccounts)
+            .where(eq(schema.socialAccounts.workspaceId, post.workspaceId)),
+        ),
+      ),
+    );
   const tags = await db.select().from(schema.postTags).where(eq(schema.postTags.postId, postId));
   const newId = await db.transaction(async (tx) => {
     const [row] = await tx
       .insert(schema.posts)
-      .values({ content: post.content, status: "draft", createdBy: user.userId })
+      .values({ workspaceId: post.workspaceId, content: post.content, status: "draft", createdBy: user.userId })
       .returning({ postId: schema.posts.postId });
     if (targets.length) {
       await tx.insert(schema.postTargets).values(
@@ -86,6 +102,7 @@ export type CalendarEvent = {
 
 export async function calendarEvents(startIso: string, endIso: string): Promise<CalendarEvent[]> {
   await requireUser();
+  const workspaceId = await activeWorkspaceId();
   const rows = await db
     .select({
       postId: schema.posts.postId,
@@ -100,7 +117,7 @@ export async function calendarEvents(startIso: string, endIso: string): Promise<
     .leftJoin(schema.socialAccounts, eq(schema.socialAccounts.socialAccountId, schema.postTargets.socialAccountId))
     .leftJoin(schema.postTags, eq(schema.postTags.postId, schema.posts.postId))
     .leftJoin(schema.tags, eq(schema.tags.tagId, schema.postTags.tagId))
-    .where(between(schema.posts.scheduledAt, new Date(startIso), new Date(endIso)))
+    .where(and(eq(schema.posts.workspaceId, workspaceId), between(schema.posts.scheduledAt, new Date(startIso), new Date(endIso))))
     .groupBy(schema.posts.postId);
   return rows.map((r) => ({
     id: r.postId,

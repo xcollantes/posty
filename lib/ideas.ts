@@ -1,10 +1,12 @@
 import { and, asc, desc, eq, exists, inArray, isNull, not, or } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
-import { loadMedia } from "@/lib/media";
+import { unknownMedia } from "@/lib/media";
 import type { TargetInput } from "@/lib/posts";
 import { tagIdsFor } from "@/lib/posts";
 
 export type IdeaInput = {
+  /** Required to create one. An update stays in the idea's own workspace. */
+  workspaceId?: string;
   title?: string;
   text?: string;
   mediaIds?: string[];
@@ -15,6 +17,7 @@ export type IdeaInput = {
 };
 
 export type IdeaFilter = {
+  workspaceId: string;
   /** null = only ideas in no group. */
   ideaGroupId?: string | null;
   tags?: string[];
@@ -36,13 +39,14 @@ const hasTag = (tagNames?: string[]) =>
   );
 
 /** Ideas, newest first, each with its tags. */
-export async function listIdeas(filter: IdeaFilter = {}) {
+export async function listIdeas(filter: IdeaFilter) {
   const { ideaGroupId, tags, includeUntagged } = filter;
   const rows = await db
     .select()
     .from(schema.ideas)
     .where(
       and(
+        eq(schema.ideas.workspaceId, filter.workspaceId),
         ideaGroupId === null
           ? isNull(schema.ideas.ideaGroupId)
           : ideaGroupId
@@ -68,8 +72,12 @@ export async function listIdeas(filter: IdeaFilter = {}) {
   }));
 }
 
-export const listIdeaGroups = () =>
-  db.select().from(schema.ideaGroups).orderBy(asc(schema.ideaGroups.createdAt), asc(schema.ideaGroups.name));
+export const listIdeaGroups = (workspaceId: string) =>
+  db
+    .select()
+    .from(schema.ideaGroups)
+    .where(eq(schema.ideaGroups.workspaceId, workspaceId))
+    .orderBy(asc(schema.ideaGroups.createdAt), asc(schema.ideaGroups.name));
 
 /** Create an idea, or update one when `ideaId` is given. Omitted fields keep their values. */
 export async function saveIdea(
@@ -79,19 +87,21 @@ export async function saveIdea(
   if (!ideaId && !input.title?.trim() && !input.text?.trim() && !input.mediaIds?.length) {
     return { ok: false, error: "Add a title, some text or a file" };
   }
-  if (input.mediaIds?.length) {
-    const found = new Set((await loadMedia(input.mediaIds)).map((m) => m.mediaId));
-    const missing = input.mediaIds.filter((id) => !found.has(id));
-    if (missing.length) return { ok: false, error: `Unknown media: ${missing.join(", ")}` };
-  }
+  const [existing] = ideaId
+    ? await db.select({ workspaceId: schema.ideas.workspaceId }).from(schema.ideas).where(eq(schema.ideas.ideaId, ideaId))
+    : [];
+  const workspaceId = ideaId ? existing?.workspaceId : input.workspaceId;
+  if (!workspaceId) return { ok: false, error: "Idea not found" };
+  const missing = await unknownMedia(input.mediaIds ?? [], workspaceId);
+  if (missing.length) return { ok: false, error: `Unknown media: ${missing.join(", ")}` };
   if (input.ideaGroupId) {
     const [group] = await db
       .select({ id: schema.ideaGroups.ideaGroupId })
       .from(schema.ideaGroups)
-      .where(eq(schema.ideaGroups.ideaGroupId, input.ideaGroupId));
+      .where(and(eq(schema.ideaGroups.ideaGroupId, input.ideaGroupId), eq(schema.ideaGroups.workspaceId, workspaceId)));
     if (!group) return { ok: false, error: "Unknown idea group" };
   }
-  const tagIds = input.tags && (await tagIdsFor(input.tags));
+  const tagIds = input.tags && (await tagIdsFor(input.tags, workspaceId));
   const values = {
     title: input.title,
     text: input.text,
@@ -107,7 +117,7 @@ export async function saveIdea(
           .set({ ...values, updatedAt: new Date() })
           .where(eq(schema.ideas.ideaId, ideaId))
           .returning({ ideaId: schema.ideas.ideaId })
-      : await tx.insert(schema.ideas).values(values).returning({ ideaId: schema.ideas.ideaId });
+      : await tx.insert(schema.ideas).values({ ...values, workspaceId }).returning({ ideaId: schema.ideas.ideaId });
     if (!row) return null;
     if (tagIds) {
       await tx.delete(schema.ideaTags).where(eq(schema.ideaTags.ideaId, row.ideaId));
@@ -124,11 +134,11 @@ export async function deleteIdea(ideaId: string): Promise<boolean> {
 }
 
 /** Create a group, or return the one that already has this name. */
-export async function createIdeaGroup(name: string) {
+export async function createIdeaGroup(workspaceId: string, name: string) {
   const [row] = await db
     .insert(schema.ideaGroups)
-    .values({ name })
-    .onConflictDoUpdate({ target: schema.ideaGroups.name, set: { name } })
+    .values({ workspaceId, name })
+    .onConflictDoUpdate({ target: [schema.ideaGroups.workspaceId, schema.ideaGroups.name], set: { name } })
     .returning();
   return row;
 }
@@ -154,10 +164,17 @@ export async function ideaPostInput(ideaId: string) {
       ? db
           .select({ socialAccountId: schema.socialAccounts.socialAccountId })
           .from(schema.socialAccounts)
-          .where(and(inArray(schema.socialAccounts.network, idea.networks), eq(schema.socialAccounts.isActive, true)))
+          .where(
+            and(
+              eq(schema.socialAccounts.workspaceId, idea.workspaceId),
+              inArray(schema.socialAccounts.network, idea.networks),
+              eq(schema.socialAccounts.isActive, true),
+            ),
+          )
       : [],
   ]);
   return {
+    workspaceId: idea.workspaceId,
     parts: [{ text: idea.text || idea.title, mediaIds: idea.mediaIds }],
     tagIds: tags.map((t) => t.tagId),
     targets: accounts.map((a): TargetInput => ({ socialAccountId: a.socialAccountId, override: null, options: {} })),

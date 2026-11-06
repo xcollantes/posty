@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { createIdeaGroup, deleteIdea, deleteIdeaGroup, ideaPostInput, saveIdea } from "@/lib/ideas";
 import { NETWORK_IDS } from "@/lib/networks/catalog";
 import { savePostAs } from "@/lib/posts";
+import { requireWorkspace } from "@/lib/workspaces";
 
 type FormState = { error?: string; ok?: string } | undefined;
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -18,10 +19,11 @@ function targetAt(value: string, timezone: string): string | null {
 }
 
 export async function saveIdeaForm(_prev: FormState, form: FormData): Promise<FormState> {
-  const user = await requireUser();
+  const { user, workspaceId } = await requireWorkspace();
   const ideaId = str(form, "ideaId") || undefined;
   const result = await saveIdea(
     {
+      workspaceId,
       title: str(form, "title").slice(0, 300),
       text: str(form, "text"),
       mediaIds: form.getAll("mediaId").map(String),
@@ -51,10 +53,10 @@ export async function removeIdea(ideaId: string) {
 }
 
 export async function addIdeaGroup(_prev: FormState, form: FormData): Promise<FormState> {
-  await requireUser();
+  const { workspaceId } = await requireWorkspace();
   const name = str(form, "name").slice(0, 100);
   if (!name) return { error: "Name is required" };
-  await createIdeaGroup(name);
+  await createIdeaGroup(workspaceId, name);
   revalidatePath("/ideas");
   return { ok: "Added" };
 }

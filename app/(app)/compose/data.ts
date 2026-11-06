@@ -6,22 +6,23 @@ import { rowToMedia } from "@/components/composer/media";
 import type { ComposerAccount, ComposerMedia } from "@/components/composer/types";
 
 /** Everything the composer needs. `postId` is the post being edited, if any. */
-export async function composerData(timezone: string, postId?: string) {
+export async function composerData(workspaceId: string, timezone: string, postId?: string) {
   const [accounts, mediaRows, snippets, tags, slots, taken] = await Promise.all([
     db
       .select()
       .from(schema.socialAccounts)
-      .where(eq(schema.socialAccounts.isActive, true))
+      .where(and(eq(schema.socialAccounts.workspaceId, workspaceId), eq(schema.socialAccounts.isActive, true)))
       .orderBy(asc(schema.socialAccounts.network), asc(schema.socialAccounts.name)),
-    db.select().from(schema.media).orderBy(desc(schema.media.createdAt)).limit(300),
-    db.select().from(schema.snippets).orderBy(asc(schema.snippets.name)),
-    db.select().from(schema.tags).orderBy(asc(schema.tags.name)),
-    db.select().from(schema.queueSlots),
+    db.select().from(schema.media).where(eq(schema.media.workspaceId, workspaceId)).orderBy(desc(schema.media.createdAt)).limit(300),
+    db.select().from(schema.snippets).where(eq(schema.snippets.workspaceId, workspaceId)).orderBy(asc(schema.snippets.name)),
+    db.select().from(schema.tags).where(eq(schema.tags.workspaceId, workspaceId)).orderBy(asc(schema.tags.name)),
+    db.select().from(schema.queueSlots).where(eq(schema.queueSlots.workspaceId, workspaceId)),
     db
       .select({ at: schema.posts.scheduledAt })
       .from(schema.posts)
       .where(
         and(
+          eq(schema.posts.workspaceId, workspaceId),
           isNotNull(schema.posts.scheduledAt),
           ne(schema.posts.status, "draft"),
           postId ? ne(schema.posts.postId, postId) : undefined,
@@ -31,6 +32,7 @@ export async function composerData(timezone: string, postId?: string) {
   // Same rule savePost() uses for "Add to queue", shown ahead of time.
   const nextSlot = nextFreeSlot(slots, taken.map((t) => t.at!), timezone);
   return {
+    workspaceId,
     accounts: accounts.map(
       (a): ComposerAccount => ({
         socialAccountId: a.socialAccountId,

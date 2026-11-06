@@ -2,7 +2,7 @@ import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import type { CurrentUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import type { PostContent, PostPart } from "@/lib/db/schema";
-import { loadMedia } from "@/lib/media";
+import { loadMedia, unknownMedia } from "@/lib/media";
 import { NETWORKS, validatePart, type NetworkId } from "@/lib/networks/catalog";
 import { nextFreeSlot } from "@/lib/queue";
 
@@ -13,6 +13,7 @@ export type TargetInput = {
 };
 
 export type SavePostInput = {
+  workspaceId: string;
   postId?: string;
   parts: PostPart[];
   targets: TargetInput[];
@@ -55,13 +56,19 @@ export async function validateTargets(targets: TargetInput[], parts: PostPart[])
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Next queue slot no other post holds. `postId` is the post being moved, if any. */
-export async function nextQueueSlot(timezone: string, postId?: string, conn: typeof db | Tx = db): Promise<Date | null> {
-  const slots = await conn.select().from(schema.queueSlots);
+export async function nextQueueSlot(
+  workspaceId: string,
+  timezone: string,
+  postId?: string,
+  conn: typeof db | Tx = db,
+): Promise<Date | null> {
+  const slots = await conn.select().from(schema.queueSlots).where(eq(schema.queueSlots.workspaceId, workspaceId));
   const taken = await conn
     .select({ at: schema.posts.scheduledAt })
     .from(schema.posts)
     .where(
       and(
+        eq(schema.posts.workspaceId, workspaceId),
         isNotNull(schema.posts.scheduledAt),
         ne(schema.posts.status, "draft"),
         postId ? ne(schema.posts.postId, postId) : undefined,
@@ -80,9 +87,9 @@ async function resolveSchedule(input: SavePostInput, timezone: string, postId: s
   }
   // Reason: otherwise posts queued at the same moment all see the same free slot.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('posty:queue'))`);
-  const at = await nextQueueSlot(timezone, postId, tx);
+  const at = await nextQueueSlot(input.workspaceId, timezone, postId, tx);
   if (at) return at;
-  const slots = await tx.select().from(schema.queueSlots);
+  const slots = await tx.select().from(schema.queueSlots).where(eq(schema.queueSlots.workspaceId, input.workspaceId));
   throw new Error(
     slots.length ? "No free queue slot in the next 12 weeks" : "Your queue has no time slots yet: add some on the Queue page",
   );
@@ -102,6 +109,24 @@ async function lockTargets(tx: Tx, postId: string) {
   return targets;
 }
 
+/** Why these accounts and tags can't go on a post in this workspace, or null. */
+async function workspaceProblem(workspaceId: string, accountIds: string[], tagIds: string[]): Promise<string | null> {
+  const accounts = accountIds.length
+    ? await db
+        .select({ id: schema.socialAccounts.socialAccountId })
+        .from(schema.socialAccounts)
+        .where(and(inArray(schema.socialAccounts.socialAccountId, accountIds), eq(schema.socialAccounts.workspaceId, workspaceId)))
+    : [];
+  if (accounts.length !== accountIds.length) return "A selected account is in another workspace or no longer exists";
+  const tags = tagIds.length
+    ? await db
+        .select({ id: schema.tags.tagId })
+        .from(schema.tags)
+        .where(and(inArray(schema.tags.tagId, tagIds), eq(schema.tags.workspaceId, workspaceId)))
+    : [];
+  return tags.length === tagIds.length ? null : "A selected tag is in another workspace or no longer exists";
+}
+
 /**
  * Create or update a post on behalf of an already-authenticated user.
  * Kept out of the "use server" actions file: every export there is a
@@ -116,9 +141,12 @@ export async function savePostAs(user: CurrentUser, input: SavePostInput): Promi
     );
     // Reason: publishing skips ids it can't find, so a bad one would post without its file.
     const mediaIds = [...new Set([...parts, ...targets.flatMap((t) => t.override?.parts ?? [])].flatMap((p) => p.mediaIds))];
-    const found = new Set((await loadMedia(mediaIds)).map((m) => m.mediaId));
-    const missing = mediaIds.filter((id) => !found.has(id));
+    const missing = await unknownMedia(mediaIds, input.workspaceId);
     if (missing.length) return { ok: false, error: `Unknown media: ${missing.join(", ")}` };
+    // Reason: checked for drafts too, or a draft could later publish to another company.
+    const tagIds = [...new Set(input.tagIds ?? [])];
+    const problem = await workspaceProblem(input.workspaceId, targets.map((t) => t.socialAccountId), tagIds);
+    if (problem) return { ok: false, error: problem };
     if (input.mode !== "draft") {
       if (!targets.length) return { ok: false, error: "Choose at least one account" };
       const errors = await validateTargets(targets, parts);
@@ -128,6 +156,7 @@ export async function savePostAs(user: CurrentUser, input: SavePostInput): Promi
     if (input.postId) {
       const [existing] = await db.select().from(schema.posts).where(eq(schema.posts.postId, input.postId));
       if (!existing) return { ok: false, error: "Post not found" };
+      if (existing.workspaceId !== input.workspaceId) return { ok: false, error: "This post is in another workspace" };
       if (existing.status === "published" || existing.status === "partial") {
         return { ok: false, error: "This post already went out. Duplicate it to post again." };
       }
@@ -156,7 +185,7 @@ export async function savePostAs(user: CurrentUser, input: SavePostInput): Promi
       } else {
         const [row] = await tx
           .insert(schema.posts)
-          .values({ content, status, scheduledAt, createdBy: user.userId })
+          .values({ workspaceId: input.workspaceId, content, status, scheduledAt, createdBy: user.userId })
           .returning({ postId: schema.posts.postId });
         id = row.postId;
       }
@@ -172,8 +201,8 @@ export async function savePostAs(user: CurrentUser, input: SavePostInput): Promi
           })),
         );
       }
-      if (input.tagIds?.length) {
-        await tx.insert(schema.postTags).values(input.tagIds.map((tagId) => ({ postId: id!, tagId })));
+      if (tagIds.length) {
+        await tx.insert(schema.postTags).values(tagIds.map((tagId) => ({ postId: id!, tagId })));
       }
       return { ok: true, postId: id!, scheduledAt: scheduledAt?.toISOString() ?? null };
     });
@@ -191,6 +220,7 @@ export async function loadPost(postId: string) {
     db.select().from(schema.postTags).where(eq(schema.postTags.postId, postId)),
   ]);
   return {
+    workspaceId: post.workspaceId,
     status: post.status,
     scheduledAt: post.scheduledAt?.toISOString() ?? null,
     parts: post.content.parts,
@@ -217,13 +247,31 @@ export async function deletePostChecked(postId: string): Promise<{ error?: strin
 
 /** Re-queue failed targets now. Published targets are left alone. */
 export async function retryFailedTargets(postId: string): Promise<{ error?: string }> {
-  const [post] = await db.select({ status: schema.posts.status }).from(schema.posts).where(eq(schema.posts.postId, postId));
+  const [post] = await db
+    .select({ status: schema.posts.status, workspaceId: schema.posts.workspaceId })
+    .from(schema.posts)
+    .where(eq(schema.posts.postId, postId));
   // Reason: this sets the post to go out now, which on a draft would publish it.
   if (post?.status !== "failed" && post?.status !== "partial") return { error: "Only failed posts can be retried" };
-  await db
+  // Reason: an account moved since is another company's now, so it stays failed.
+  const requeued = await db
     .update(schema.postTargets)
     .set({ status: "pending", attemptCount: 0, nextAttemptAt: null, error: null })
-    .where(and(eq(schema.postTargets.postId, postId), eq(schema.postTargets.status, "failed")));
+    .where(
+      and(
+        eq(schema.postTargets.postId, postId),
+        eq(schema.postTargets.status, "failed"),
+        inArray(
+          schema.postTargets.socialAccountId,
+          db
+            .select({ id: schema.socialAccounts.socialAccountId })
+            .from(schema.socialAccounts)
+            .where(eq(schema.socialAccounts.workspaceId, post.workspaceId)),
+        ),
+      ),
+    )
+    .returning({ id: schema.postTargets.postTargetId });
+  if (!requeued.length) return { error: "The accounts that failed are in another workspace now" };
   await db
     .update(schema.posts)
     .set({ status: "scheduled", scheduledAt: new Date(), updatedAt: new Date() })
@@ -232,10 +280,13 @@ export async function retryFailedTargets(postId: string): Promise<{ error?: stri
 }
 
 /** Tag ids for these names, creating any that don't exist yet. */
-export async function tagIdsFor(names: string[]): Promise<string[]> {
+export async function tagIdsFor(names: string[], workspaceId: string): Promise<string[]> {
   const clean = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
   if (!clean.length) return [];
-  await db.insert(schema.tags).values(clean.map((name) => ({ name }))).onConflictDoNothing();
-  const rows = await db.select({ tagId: schema.tags.tagId }).from(schema.tags).where(inArray(schema.tags.name, clean));
+  await db.insert(schema.tags).values(clean.map((name) => ({ workspaceId, name }))).onConflictDoNothing();
+  const rows = await db
+    .select({ tagId: schema.tags.tagId })
+    .from(schema.tags)
+    .where(and(eq(schema.tags.workspaceId, workspaceId), inArray(schema.tags.name, clean)));
   return rows.map((r) => r.tagId);
 }

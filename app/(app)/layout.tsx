@@ -7,15 +7,24 @@ import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
 import { daysFromNow } from "@/lib/time";
+import { activeWorkspaceId, listWorkspaces } from "@/lib/workspaces";
 import { Nav } from "./Nav";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   await requireUser();
   const soon = daysFromNow(10);
+  const [workspaces, workspaceId] = await Promise.all([listWorkspaces(), activeWorkspaceId()]);
   // Accounts that need attention: dead tokens, or LinkedIn tokens about to expire (no refresh).
+  // Reason: across workspaces, so a dead token at another company isn't missed.
   const attention = await db
-    .select({ name: schema.socialAccounts.name, network: schema.socialAccounts.network })
+    .select({
+      name: schema.socialAccounts.name,
+      network: schema.socialAccounts.network,
+      workspace: schema.workspaces.name,
+    })
     .from(schema.socialAccounts)
+    .innerJoin(schema.workspaces, eq(schema.workspaces.workspaceId, schema.socialAccounts.workspaceId))
     .where(
       and(
         eq(schema.socialAccounts.isActive, true),
@@ -39,6 +48,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Logo className="size-8" />
               Posty
             </Link>
+            {workspaces.length > 1 && <WorkspaceSwitcher workspaces={workspaces} current={workspaceId} />}
             <div className="ml-auto flex items-center gap-2">
               <Link href="/compose" className="btn-primary">
                 <Plus className="size-4" />
@@ -60,7 +70,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <p className="mb-3 flex items-start gap-2 rounded-xl bg-warn/15 px-3 py-2 text-sm text-warn">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
               <span>
-                {attention.map((a) => `${a.name} (${NETWORKS[a.network as NetworkId]?.label ?? a.network})`).join(", ")}{" "}
+                {attention
+                  .map((a) => {
+                    const label = NETWORKS[a.network as NetworkId]?.label ?? a.network;
+                    return `${a.name} (${label}${workspaces.length > 1 ? `, ${a.workspace}` : ""})`;
+                  })
+                  .join(", ")}{" "}
                 {attention.length === 1 ? "needs" : "need"} to be reconnected.{" "}
                 <Link href="/accounts" className="font-semibold text-white underline">
                   Go to Accounts

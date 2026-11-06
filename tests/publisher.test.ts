@@ -34,11 +34,13 @@ const { claimDue, failMissed, failStuck, publishTarget } = await import("@/lib/p
 const reachable = await db.execute(sql`select 1`).then(() => true, () => false);
 
 let accountId = "";
+let workspaceId = "";
 
 async function makePost(texts: string[], accounts = 1) {
   const [post] = await db
     .insert(schema.posts)
     .values({
+      workspaceId,
       status: "scheduled",
       scheduledAt: new Date(Date.now() - 1000),
       content: { parts: texts.map((text) => ({ text, mediaIds: [] })) },
@@ -52,7 +54,7 @@ async function makePost(texts: string[], accounts = 1) {
         : (
             await db
               .insert(schema.socialAccounts)
-              .values({ network: "mastodon", providerAccountId: `extra-${crypto.randomUUID()}`, name: "Extra", accessTokenEnc: encrypt("t") })
+              .values({ workspaceId, network: "mastodon", providerAccountId: `extra-${crypto.randomUUID()}`, name: "Extra", accessTokenEnc: encrypt("t") })
               .returning()
           )[0].socialAccountId;
     const [t] = await db.insert(schema.postTargets).values({ postId: post.postId, socialAccountId: acct }).returning();
@@ -67,9 +69,10 @@ const post = async (id: string) => (await db.select().from(schema.posts).where(e
 
 describe.skipIf(!reachable)("publisher", () => {
   beforeAll(async () => {
+    [{ workspaceId }] = await db.select().from(schema.workspaces).limit(1);
     const [a] = await db
       .insert(schema.socialAccounts)
-      .values({ network: "mastodon", providerAccountId: `test-${crypto.randomUUID()}`, name: "Test", accessTokenEnc: encrypt("token") })
+      .values({ workspaceId, network: "mastodon", providerAccountId: `test-${crypto.randomUUID()}`, name: "Test", accessTokenEnc: encrypt("token") })
       .returning();
     accountId = a.socialAccountId;
   });

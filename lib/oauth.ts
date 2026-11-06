@@ -6,6 +6,8 @@ export type OAuthCookie = {
   state: string;
   verifier: string;
   network: string;
+  /** Where the connect started, since the active workspace can change before the callback. */
+  workspaceId: string;
   data: Record<string, string>;
 };
 

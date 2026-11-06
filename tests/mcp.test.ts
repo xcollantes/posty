@@ -17,6 +17,8 @@ const { POST } = await import("@/app/api/mcp/route");
 
 const reachable = await db.execute(sql`select 1`).then(() => true, () => false);
 
+let workspaceId = "";
+
 const future = (hours = 24) => new Date(Date.now() + hours * 3_600_000).toISOString();
 const past = () => new Date(Date.now() - 3_600_000).toISOString();
 
@@ -37,7 +39,8 @@ async function rpc(token: string, name: string, args: object) {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function call(name: string, args: object = {}): Promise<{ isError: boolean; text: string; data: any }> {
-  const body = await (await rpc("test-token", name, args)).text();
+  // Reason: tools that work from a row id ignore it.
+  const body = await (await rpc("test-token", name, { workspaceId, ...args })).text();
   const frame = body.split("\n").find((line) => line.startsWith("data:"));
   const { result, error } = JSON.parse(frame ? frame.slice(5) : body);
   if (error) return { isError: true, text: error.message, data: null };
@@ -71,6 +74,7 @@ describe.runIf(reachable)("MCP tools", () => {
     const [row] = await db
       .insert(schema.socialAccounts)
       .values({
+        workspaceId,
         network,
         providerAccountId: `mcp-test-${id}`,
         name: `MCP ${network}`,
@@ -97,6 +101,7 @@ describe.runIf(reachable)("MCP tools", () => {
   };
 
   beforeAll(async () => {
+    [{ workspaceId }] = await db.select().from(schema.workspaces).limit(1);
     await db
       .insert(schema.users)
       .values({ email: "mcp-test@example.test", name: "MCP Test", passwordHash: "x", timezone: "America/Los_Angeles" })
@@ -113,6 +118,7 @@ describe.runIf(reachable)("MCP tools", () => {
     const [media] = await db
       .insert(schema.media)
       .values({
+        workspaceId,
         fileName: `${crypto.randomUUID()}.png`,
         originalName: "mcp-test.png",
         mime: "image/png",
@@ -136,6 +142,40 @@ describe.runIf(reachable)("MCP tools", () => {
   describe("auth", () => {
     it("rejects the wrong token", async () => {
       expect((await rpc("wrong", "list_accounts", {})).status).toBe(401);
+    });
+  });
+
+  describe("workspaces", () => {
+    it("lists them, and refuses a tool that needs one without it", async () => {
+      expect((await ok("list_workspaces")).map((w: any) => w.workspaceId)).toContain(workspaceId);
+      const body = await (await rpc("test-token", "list_accounts", {})).text();
+      expect(body).toMatch(/workspaceId/);
+      expect(body).toMatch(/"isError":true/);
+    });
+
+    it("keeps another workspace's accounts, ideas and uploads apart", async () => {
+      const [other] = await db.insert(schema.workspaces).values({ name: `mcp-test-${crypto.randomUUID()}` }).returning();
+      const inOther = { workspaceId: other.workspaceId };
+      try {
+        const listed = await ok("list_accounts", inOther);
+        expect(listed.accounts).toEqual([]);
+        await refused("create_post", { ...inOther, parts: [{ text: "x" }], targets: [{ accountId: mastodon }] }, /another workspace/);
+        const { ideaId } = await ok("create_idea", { title: "mcp-test" });
+        await refused("create_post", { ...inOther, ideaId }, /another workspace/);
+        const { uploadUrl } = await ok("get_media_upload_url", { ...inOther, fileName: "mcp-test.png" });
+        const grant = readUploadGrant(new URL(uploadUrl).searchParams.get("token"));
+        expect(grant?.workspaceId).toBe(other.workspaceId);
+      } finally {
+        await db.delete(schema.workspaces).where(eq(schema.workspaces.workspaceId, other.workspaceId));
+      }
+    });
+
+    it("edits a post in its own workspace without being told which", async () => {
+      const postId = await draft();
+      await ok("edit_post", { workspaceId: crypto.randomUUID(), postId, parts: [{ text: "edited" }], tags: ["mcp-test-edit"] });
+      const post = await ok("get_post", { postId });
+      expect(post.parts[0].text).toBe("edited");
+      expect(post.tags).toEqual(["mcp-test-edit"]);
     });
   });
 

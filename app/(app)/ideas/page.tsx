@@ -7,18 +7,18 @@ import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { rowToMedia } from "@/components/composer/media";
 import type { ComposerMedia } from "@/components/composer/types";
 import { Card, Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { listIdeaGroups, listIdeas } from "@/lib/ideas";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
+import { requireWorkspace } from "@/lib/workspaces";
 import { IdeaForm, MoveIdea } from "./IdeaForm";
 
 export const metadata: Metadata = { title: "Ideas" };
 
 export default async function IdeasPage({ searchParams }: PageProps<"/ideas">) {
-  const user = await requireUser();
+  const { user, workspaceId } = await requireWorkspace();
   const { edit } = await searchParams;
-  const [groups, ideas] = await Promise.all([listIdeaGroups(), listIdeas()]);
+  const [groups, ideas] = await Promise.all([listIdeaGroups(workspaceId), listIdeas({ workspaceId })]);
 
   const mediaIds = [...new Set(ideas.flatMap((i) => i.mediaIds))];
   const mediaRows = mediaIds.length
