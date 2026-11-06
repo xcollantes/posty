@@ -199,7 +199,22 @@ export function Composer({ workspaceId, accounts, library, snippets, tags, initi
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
       <div className="min-w-0 space-y-6">
-        <Card title="Post to">
+        <Card
+          title="Post to"
+          aside={
+            accounts.length > 1 && (
+              <button
+                type="button"
+                className="text-sm font-semibold text-link hover:underline"
+                onClick={() =>
+                  setSelected(selected.length === accounts.length ? [] : accounts.map((a) => a.socialAccountId))
+                }
+              >
+                {selected.length === accounts.length ? "Clear" : "Select all"}
+              </button>
+            )
+          }
+        >
           {accounts.length === 0 ? (
             <p className="text-muted">
               No accounts connected yet. <Link href="/accounts">Connect one</Link> first.
