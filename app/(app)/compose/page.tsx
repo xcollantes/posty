@@ -11,7 +11,7 @@ export default async function NewPostPage({ searchParams }: PageProps<"/compose"
   const { at, account } = await searchParams;
   const data = await composerData(user.timezone);
   return (
-    <Page eyebrow="Create" title="New post">
+    <Page title="New post">
       <Composer
         {...data}
         initial={{

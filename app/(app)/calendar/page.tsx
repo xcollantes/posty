@@ -9,7 +9,6 @@ export default async function CalendarPage() {
   await requireUser();
   return (
     <Page
-      eyebrow="Plan"
       title="Calendar"
       description="Click a day to write a post for it. Drag a draft or scheduled post to move it."
     >

@@ -47,7 +47,6 @@ export default async function QueuePage() {
 
   return (
     <Page
-      eyebrow="Publish"
       title="Queue"
       description={
         <>

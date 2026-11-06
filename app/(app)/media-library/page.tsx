@@ -12,7 +12,7 @@ export default async function MediaLibraryPage() {
   await requireUser();
   const rows = await db.select().from(schema.media).orderBy(desc(schema.media.createdAt)).limit(500);
   return (
-    <Page eyebrow="Library" title="Media" description="Images and videos you can attach to posts.">
+    <Page title="Media" description="Images and videos you can attach to posts.">
       <MediaGrid initial={rows.map(rowToMedia)} />
     </Page>
   );

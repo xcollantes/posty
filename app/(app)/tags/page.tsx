@@ -17,7 +17,6 @@ export default async function TagsPage() {
   const tags = await db.select().from(schema.tags).orderBy(asc(schema.tags.name));
   return (
     <Page
-      eyebrow="Library"
       title="Tags"
       description="Group posts by campaign or topic. A tag's color marks its posts on the calendar."
     >

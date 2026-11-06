@@ -1,16 +1,14 @@
 // Page chrome shared by every screen: the dark hero, cards and the logo.
 
 /**
- * A page: a dark hero with an eyebrow and title, then the content. The
+ * A page: a dark hero with a title, then the content. The
  * content's first row overlaps the hero's bottom edge, so make it cards.
  */
 export function Page({
-  eyebrow,
   title,
   description,
   children,
 }: {
-  eyebrow: string;
   title: string;
   description?: React.ReactNode;
   children: React.ReactNode;
@@ -19,8 +17,7 @@ export function Page({
     <>
       <section className="hero text-white">
         <div className="mx-auto max-w-6xl px-4 pb-24 pt-8 sm:pt-10">
-          <p className="eyebrow">{eyebrow}</p>
-          <h1 className="mt-2">{title}</h1>
+          <h1>{title}</h1>
           {description && (
             <p className="mt-2 max-w-2xl text-chrome-muted [&_a]:text-white [&_a]:underline">{description}</p>
           )}
