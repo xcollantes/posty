@@ -40,7 +40,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
   const soon = daysFromNow(10);
 
   return (
-    <Page eyebrow="Connect" title="Accounts" description="The social accounts Posty posts to.">
+    <Page title="Accounts" description="The social accounts Posty posts to.">
       <div className="space-y-6">
         {/* Opaque cards, not tinted ones: they can sit on the dark hero. */}
         {typeof error === "string" && (

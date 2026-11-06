@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   const users = await db.select().from(schema.users).orderBy(asc(schema.users.createdAt));
   const zones = Intl.supportedValuesOf("timeZone");
   return (
-    <Page eyebrow="Account" title="Settings" description={`Signed in as ${me.email}.`}>
+    <Page title="Settings" description={`Signed in as ${me.email}.`}>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Profile">
           <ActionForm action={updateProfile} className="space-y-4">

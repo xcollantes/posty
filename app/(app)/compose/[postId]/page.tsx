@@ -30,7 +30,6 @@ export default async function EditPostPage({ params }: PageProps<"/compose/[post
 
   return (
     <Page
-      eyebrow={readOnly ? "Published" : "Create"}
       title={readOnly ? "Post" : post.status === "draft" ? "Edit draft" : "Edit post"}
     >
       <Composer

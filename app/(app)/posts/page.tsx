@@ -101,7 +101,7 @@ export default async function PostsPage({ searchParams }: PageProps<"/posts">) {
   const filtered = Boolean(q || accountFilter || tagFilter);
 
   return (
-    <Page eyebrow="Publish" title="Posts" description="Everything scheduled, drafted, published and failed.">
+    <Page title="Posts" description="Everything scheduled, drafted, published and failed.">
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-line p-4">
           <nav className="flex max-w-full gap-1 overflow-x-auto rounded-xl bg-soft p-1 [scrollbar-width:none]">

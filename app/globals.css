@@ -21,7 +21,7 @@
   --chrome-line: #2a2c31;
   --chrome-muted: #9ea2ad;
   --warn: #ef8132;
-  --eyebrow: #f8d948;
+  --hero-title: #f8d948;
   --card-shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 12px 32px -16px rgb(16 24 40 / 0.18);
   /* White text reads at 4.9:1 or better along the whole gradient. */
   --grad-cta: linear-gradient(135deg, #c127bf, #6e3cf1);
@@ -58,7 +58,6 @@
   --color-chrome-line: var(--chrome-line);
   --color-chrome-muted: var(--chrome-muted);
   --color-warn: var(--warn);
-  --color-eyebrow: var(--eyebrow);
   --font-sans: var(--font-manrope), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -154,14 +153,14 @@
   .pill-check {
     @apply inline-flex cursor-pointer items-center gap-2 rounded-full border border-line bg-bg px-3 py-1.5 text-sm font-semibold hover:bg-soft has-[:checked]:border-link has-[:checked]:bg-link/10;
   }
-  .eyebrow {
-    @apply text-xs font-bold uppercase tracking-[0.14em] text-eyebrow;
-  }
   .hero {
     background:
       radial-gradient(42rem 18rem at 100% 100%, rgb(110 60 241 / 0.28), transparent 70%),
       radial-gradient(32rem 16rem at 0% 100%, rgb(193 39 191 / 0.16), transparent 70%),
       var(--chrome);
+  }
+  .hero h1 {
+    color: var(--hero-title);
   }
   .data-table {
     @apply w-full border-collapse text-sm;

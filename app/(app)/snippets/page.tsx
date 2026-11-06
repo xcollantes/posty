@@ -14,7 +14,6 @@ export default async function SnippetsPage() {
   const snippets = await db.select().from(schema.snippets).orderBy(asc(schema.snippets.kind), asc(schema.snippets.name));
   return (
     <Page
-      eyebrow="Library"
       title="Snippets"
       description="Hashtag groups and templates you can drop into a post from the composer."
     >

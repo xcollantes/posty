@@ -76,7 +76,6 @@ export default async function AnalyticsPage() {
 
   return (
     <Page
-      eyebrow="Insights"
       title="Analytics"
       description={
         <>
