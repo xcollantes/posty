@@ -3,9 +3,9 @@ import Link from "next/link";
 import { and, asc, count, desc, eq, exists, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { ExternalLink, ImageIcon, Inbox, MessagesSquare, Search } from "lucide-react";
 import { Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
+import { requireWorkspace } from "@/lib/workspaces";
 import { PostActions } from "./PostActions";
 
 export const metadata: Metadata = { title: "Posts" };
@@ -28,14 +28,17 @@ const TARGET_STATUS: Record<string, { label: string; className: string }> = {
 };
 
 export default async function PostsPage({ searchParams }: PageProps<"/posts">) {
-  const user = await requireUser();
+  const { user, workspaceId } = await requireWorkspace();
   const sp = await searchParams;
   const tab: Tab = (sp.status as Tab) in TABS ? (sp.status as Tab) : "scheduled";
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const accountFilter = typeof sp.account === "string" ? sp.account : "";
   const tagFilter = typeof sp.tag === "string" ? sp.tag : "";
 
-  const filters: (SQL | undefined)[] = [inArray(schema.posts.status, [...TABS[tab].statuses])];
+  const filters: (SQL | undefined)[] = [
+    eq(schema.posts.workspaceId, workspaceId),
+    inArray(schema.posts.status, [...TABS[tab].statuses]),
+  ];
   if (q) filters.push(ilike(sql`${schema.posts.content}::text`, `%${q}%`));
   if (accountFilter) {
     filters.push(
@@ -67,9 +70,14 @@ export default async function PostsPage({ searchParams }: PageProps<"/posts">) {
       .where(and(...filters))
       .orderBy(tab === "scheduled" ? asc(schema.posts.scheduledAt) : desc(schema.posts.updatedAt))
       .limit(100),
+    // Reason: every workspace's, so old posts on an account that has moved keep its name.
     db.select().from(schema.socialAccounts).orderBy(asc(schema.socialAccounts.name)),
-    db.select().from(schema.tags).orderBy(asc(schema.tags.name)),
-    db.select({ status: schema.posts.status, n: count() }).from(schema.posts).groupBy(schema.posts.status),
+    db.select().from(schema.tags).where(eq(schema.tags.workspaceId, workspaceId)).orderBy(asc(schema.tags.name)),
+    db
+      .select({ status: schema.posts.status, n: count() })
+      .from(schema.posts)
+      .where(eq(schema.posts.workspaceId, workspaceId))
+      .groupBy(schema.posts.status),
   ]);
   const ids = posts.map((p) => p.postId);
   const mediaIds = posts.flatMap((p) => p.content.parts.flatMap((part) => part.mediaIds));
@@ -128,7 +136,7 @@ export default async function PostsPage({ searchParams }: PageProps<"/posts">) {
             </div>
             <select name="account" defaultValue={accountFilter} aria-label="Account" className="input w-auto">
               <option value="">All accounts</option>
-              {accounts.map((a) => (
+              {accounts.filter((a) => a.workspaceId === workspaceId).map((a) => (
                 <option key={a.socialAccountId} value={a.socialAccountId}>
                   {a.name} ({NETWORKS[a.network as NetworkId]?.label ?? a.network})
                 </option>

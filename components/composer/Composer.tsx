@@ -20,6 +20,8 @@ import type {
 } from "./types";
 
 type Props = {
+  /** Sent with the save, so a tab left open can't save into a workspace switched to elsewhere. */
+  workspaceId: string;
   accounts: ComposerAccount[];
   library: ComposerMedia[];
   snippets: ComposerSnippet[];
@@ -46,7 +48,7 @@ const defaultOptions = (acct: ComposerAccount) =>
     NETWORKS[acct.network].options.filter((f) => f.default).map((f) => [f.key, f.default!]),
   );
 
-export function Composer({ accounts, library, snippets, tags, initial, nextSlot, timezone }: Props) {
+export function Composer({ workspaceId, accounts, library, snippets, tags, initial, nextSlot, timezone }: Props) {
   const router = useRouter();
   const byId = useMemo(() => new Map(accounts.map((a) => [a.socialAccountId, a])), [accounts]);
   const readOnly = initial.status === "published" || initial.status === "partial";
@@ -132,6 +134,7 @@ export function Composer({ accounts, library, snippets, tags, initial, nextSlot,
       return;
     }
     const input: SavePostInput = {
+      workspaceId,
       postId: initial.postId,
       parts,
       targets: selected.map((id) => ({

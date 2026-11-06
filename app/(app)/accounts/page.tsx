@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { CircleAlert, CircleCheck, Info } from "lucide-react";
 import { Avatar } from "@/components/composer/Preview";
 import { Card, Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { networks } from "@/lib/networks";
 import { NETWORK_IDS, NETWORKS, type NetworkId } from "@/lib/networks/catalog";
 import { redirectUriFor } from "@/lib/oauth";
 import { daysFromNow } from "@/lib/time";
+import { listWorkspaces, requireWorkspace } from "@/lib/workspaces";
 import { AccountRowActions, FormConnect, OAuthPreForm } from "./AccountForms";
 
 export const metadata: Metadata = { title: "Accounts" };
@@ -30,11 +30,14 @@ const configured = (id: NetworkId) => {
 };
 
 export default async function AccountsPage({ searchParams }: PageProps<"/accounts">) {
-  const user = await requireUser();
-  const { error, connected, network } = await searchParams;
+  const { user, workspaceId } = await requireWorkspace();
+  const { error, connected, elsewhere, network } = await searchParams;
+  const inOther = Number(elsewhere) || 0;
+  const moveTo = (await listWorkspaces()).filter((w) => w.workspaceId !== workspaceId);
   const accounts = await db
     .select()
     .from(schema.socialAccounts)
+    .where(eq(schema.socialAccounts.workspaceId, workspaceId))
     .orderBy(asc(schema.socialAccounts.network), asc(schema.socialAccounts.name));
   const fmt = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: user.timezone });
   const soon = daysFromNow(10);
@@ -49,8 +52,15 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
             {error}
           </p>
         )}
-        {connected === "0" ? (
+        {inOther > 0 && (
           <p className="card flex items-center gap-2 px-5 py-3 text-sm font-semibold">
+            <Info className="size-4 shrink-0" />
+            {inOther} {network} account{inOther === 1 ? " is" : "s are"} in another workspace, so we left{" "}
+            {inOther === 1 ? "it" : "them"} there. Switch to that workspace to move {inOther === 1 ? "it" : "them"} here.
+          </p>
+        )}
+        {connected === "0" ? (
+          !inOther && <p className="card flex items-center gap-2 px-5 py-3 text-sm font-semibold">
             <Info className="size-4 shrink-0" />
             Refreshed the {network} account you already had. To add a different one, switch accounts (or sign out) on{" "}
             {network} in this browser, then Connect again.
@@ -111,6 +121,7 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
                           <AccountRowActions
                             socialAccountId={a.socialAccountId}
                             isActive={a.isActive}
+                            moveTo={moveTo}
                             reconnectHref={
                               info.connectKind === "oauth" && a.network !== "mastodon"
                                 ? `/api/connect/${a.network}/start`
@@ -133,7 +144,8 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
             <>
               Most networks need a developer app first; docs/networks.md has the steps. Bluesky and Mastodon don&apos;t.
               Connect again to add another account on the same network. X, LinkedIn, Pinterest and Threads use
-              whichever account this browser is signed in to, so switch accounts there first.
+              whichever account this browser is signed in to, so switch accounts there first. Facebook and YouTube add
+              everything the login manages, so move any extras to their own workspace.
             </>
           }
         >

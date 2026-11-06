@@ -2,6 +2,8 @@ import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 
 export type MetricsFilter = {
+  /** By the post's workspace, so history stays put when an account moves. */
+  workspaceId?: string;
   from?: Date;
   to?: Date;
   accountIds?: string[];
@@ -40,6 +42,7 @@ export async function publishedWithMetrics(filter: MetricsFilter = {}) {
     .where(
       and(
         eq(schema.postTargets.status, "published"),
+        filter.workspaceId ? eq(schema.posts.workspaceId, filter.workspaceId) : undefined,
         filter.from && gte(schema.postTargets.publishedAt, filter.from),
         filter.to && lte(schema.postTargets.publishedAt, filter.to),
         filter.accountIds && inArray(schema.postTargets.socialAccountId, filter.accountIds),

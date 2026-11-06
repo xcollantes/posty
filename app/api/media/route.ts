@@ -1,5 +1,6 @@
 import { getUser } from "@/lib/auth";
 import { readUploadGrant, saveUpload } from "@/lib/media";
+import { activeWorkspaceId } from "@/lib/workspaces";
 
 /**
  * Streaming upload: the raw file is the request body (no multipart), so
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
   const num = (k: string) => (url.searchParams.get(k) ? Number(url.searchParams.get(k)) : undefined);
   try {
     const row = await saveUpload({
+      workspaceId: grant?.workspaceId ?? (await activeWorkspaceId()),
       body: request.body,
       originalName: grant?.name ?? url.searchParams.get("name") ?? "upload",
       altText: grant?.altText,

@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { ChartColumn } from "lucide-react";
 import { Card, Page } from "@/components/ui";
 import { publishedWithMetrics, sumTotals, totalsByNetwork } from "@/lib/analytics";
-import { requireUser } from "@/lib/auth";
 import { NETWORKS, type NetworkId } from "@/lib/networks/catalog";
+import { requireWorkspace } from "@/lib/workspaces";
 
 export const metadata: Metadata = { title: "Analytics" };
 
 export default async function AnalyticsPage() {
-  const user = await requireUser();
-  const rows = await publishedWithMetrics({ limit: 200 });
+  const { user, workspaceId } = await requireWorkspace();
+  const rows = await publishedWithMetrics({ workspaceId, limit: 200 });
   const totals = totalsByNetwork(rows);
   // Across every network, for the stat cards.
   const all = sumTotals(totals.values());

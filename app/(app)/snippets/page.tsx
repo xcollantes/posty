@@ -1,17 +1,21 @@
 import type { Metadata } from "next";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Trash2 } from "lucide-react";
 import { createSnippet, deleteSnippet } from "@/app/actions/library";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { Card, Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
+import { requireWorkspace } from "@/lib/workspaces";
 
 export const metadata: Metadata = { title: "Snippets" };
 
 export default async function SnippetsPage() {
-  await requireUser();
-  const snippets = await db.select().from(schema.snippets).orderBy(asc(schema.snippets.kind), asc(schema.snippets.name));
+  const { workspaceId } = await requireWorkspace();
+  const snippets = await db
+    .select()
+    .from(schema.snippets)
+    .where(eq(schema.snippets.workspaceId, workspaceId))
+    .orderBy(asc(schema.snippets.kind), asc(schema.snippets.name));
   return (
     <Page
       title="Snippets"

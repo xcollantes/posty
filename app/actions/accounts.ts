@@ -2,20 +2,21 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { saveConnected, toAccount, withFreshToken } from "@/lib/accounts";
+import { moveAccountTo, saveConnected, toAccount, withFreshToken } from "@/lib/accounts";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { networks } from "@/lib/networks";
 import type { NetworkId } from "@/lib/networks/catalog";
+import { activeWorkspaceId } from "@/lib/workspaces";
 
 export async function connectWithForm(networkId: string, values: Record<string, string>): Promise<{ error?: string }> {
   await requireUser();
   const network = networks[networkId as NetworkId];
   if (!network || network.connect.kind !== "form") return { error: "Unknown network" };
   try {
-    await saveConnected(networkId, await network.connect.verify(values));
+    const { elsewhere } = await saveConnected(networkId, await network.connect.verify(values), await activeWorkspaceId());
     revalidatePath("/accounts");
-    return {};
+    return elsewhere ? { error: "That account is in another workspace. Switch to that workspace to move it here." } : {};
   } catch (err) {
     return { error: (err as Error).message };
   }
@@ -35,6 +36,13 @@ export async function setAccountActive(socialAccountId: string, isActive: boolea
     .set({ isActive })
     .where(eq(schema.socialAccounts.socialAccountId, socialAccountId));
   revalidatePath("/", "layout");
+}
+
+export async function moveAccount(socialAccountId: string, workspaceId: string): Promise<{ error?: string }> {
+  await requireUser();
+  const result = await moveAccountTo(socialAccountId, workspaceId);
+  if (!result.error) revalidatePath("/", "layout");
+  return result;
 }
 
 /** Reload network data (e.g. Pinterest boards) and test the token. */

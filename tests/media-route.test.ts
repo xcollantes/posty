@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { sql } from "drizzle-orm";
 import sharp from "sharp";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 process.env.APP_KEY ??= "test-key";
 process.env.DATABASE_URL ??= "postgres://posty:posty@localhost:5432/posty";
@@ -17,8 +17,10 @@ process.env.MEDIA_DIR = dir;
 // Stands in for the session cookie, which needs a real Next request.
 let session: object | null = null;
 vi.mock("@/lib/auth", () => ({ getUser: async () => session }));
+let workspaceId = "";
+vi.mock("@/lib/workspaces", () => ({ activeWorkspaceId: async () => workspaceId }));
 
-const { db } = await import("@/lib/db");
+const { db, schema } = await import("@/lib/db");
 const { sign } = await import("@/lib/crypto");
 const { createUploadGrant, sniffMime } = await import("@/lib/media");
 const { POST } = await import("@/app/api/media/route");
@@ -30,6 +32,10 @@ const post = (body: BodyInit | null, query = "", headers: Record<string, string>
   POST(new Request(`http://localhost/api/media${query}`, { method: "POST", body, headers }));
 
 describe.runIf(reachable)("POST /api/media", () => {
+  beforeAll(async () => {
+    [{ workspaceId }] = await db.select().from(schema.workspaces).limit(1);
+  });
+
   beforeEach(() => {
     session = null;
   });
@@ -52,13 +58,13 @@ describe.runIf(reachable)("POST /api/media", () => {
   });
 
   it("hides the route from Funnel traffic, even with a valid grant", async () => {
-    const token = createUploadGrant("route-test.png");
+    const token = createUploadGrant(workspaceId, "route-test.png");
     const res = await post(png, `?token=${token}`, { "tailscale-funnel-request": "1" });
     expect(res.status).toBe(404);
   });
 
   it("takes the name and alt text from the grant", async () => {
-    const token = createUploadGrant("route-test-grant.png", "A red square");
+    const token = createUploadGrant(workspaceId, "route-test-grant.png", "A red square");
     const res = await post(png, `?name=ignored.png&token=${encodeURIComponent(token)}`);
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({

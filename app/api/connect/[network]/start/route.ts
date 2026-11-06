@@ -5,6 +5,7 @@ import { appUrl } from "@/lib/env";
 import { networks } from "@/lib/networks";
 import type { NetworkId } from "@/lib/networks/catalog";
 import { accountsRedirect, OAUTH_COOKIE, redirectUriFor } from "@/lib/oauth";
+import { activeWorkspaceId } from "@/lib/workspaces";
 
 /** Begin an OAuth connect: remember state + PKCE verifier, then redirect. */
 export async function GET(request: Request, ctx: RouteContext<"/api/connect/[network]/start">) {
@@ -24,7 +25,10 @@ export async function GET(request: Request, ctx: RouteContext<"/api/connect/[net
     const { url, data } = await network.connect.authorize(start, input);
     (await cookies()).set(
       OAUTH_COOKIE,
-      sign({ state: start.state, verifier: start.codeVerifier, network: id, data: data ?? {} }, 600),
+      sign(
+        { state: start.state, verifier: start.codeVerifier, network: id, workspaceId: await activeWorkspaceId(), data: data ?? {} },
+        600,
+      ),
       {
         httpOnly: true,
         secure: appUrl().startsWith("https://"),

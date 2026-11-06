@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
 import { appUrl } from "@/lib/env";
 import { deleteMediaIfUnused, MAX_ALT_TEXT } from "@/lib/media";
+import { requireWorkspace } from "@/lib/workspaces";
 import { headers } from "next/headers";
 
 type FormState = { error?: string; ok?: string } | undefined;
@@ -85,12 +86,12 @@ export async function deleteMedia(mediaId: string): Promise<{ error?: string }> 
 // ---- Snippets, tags, queue ----
 
 export async function createSnippet(_prev: FormState, form: FormData): Promise<FormState> {
-  await requireUser();
+  const { workspaceId } = await requireWorkspace();
   const kind = str(form, "kind") === "template" ? "template" : "hashtags";
   const name = str(form, "name");
   const body = str(form, "body");
   if (!name || !body) return { error: "Name and text are required" };
-  await db.insert(schema.snippets).values({ kind, name, body });
+  await db.insert(schema.snippets).values({ workspaceId, kind, name, body });
   revalidatePath("/snippets");
   return { ok: "Saved" };
 }
@@ -102,11 +103,14 @@ export async function deleteSnippet(snippetId: string) {
 }
 
 export async function createTag(_prev: FormState, form: FormData): Promise<FormState> {
-  await requireUser();
+  const { workspaceId } = await requireWorkspace();
   const name = str(form, "name");
   if (!name) return { error: "Name is required" };
   const color = /^#[0-9a-f]{6}$/i.test(str(form, "color")) ? str(form, "color") : "#0ea5e9";
-  await db.insert(schema.tags).values({ name, color }).onConflictDoUpdate({ target: schema.tags.name, set: { color } });
+  await db
+    .insert(schema.tags)
+    .values({ workspaceId, name, color })
+    .onConflictDoUpdate({ target: [schema.tags.workspaceId, schema.tags.name], set: { color } });
   revalidatePath("/tags");
   return { ok: "Saved" };
 }
@@ -118,12 +122,12 @@ export async function deleteTag(tagId: string) {
 }
 
 export async function addQueueSlot(_prev: FormState, form: FormData): Promise<FormState> {
-  await requireUser();
+  const { workspaceId } = await requireWorkspace();
   const time = str(form, "time");
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return { error: "Pick a time" };
   const days = form.getAll("day").map(Number).filter((d) => d >= 0 && d <= 6);
   if (!days.length) return { error: "Pick at least one day" };
-  await db.insert(schema.queueSlots).values(days.map((dayOfWeek) => ({ dayOfWeek, time })));
+  await db.insert(schema.queueSlots).values(days.map((dayOfWeek) => ({ workspaceId, dayOfWeek, time })));
   revalidatePath("/queue");
   return { ok: "Added" };
 }
