@@ -188,15 +188,16 @@ export function readUploadGrant(token: string | null): { name: string; altText: 
 }
 
 /**
- * Delete a file unless a post that can still go out needs it. Failed and
- * partial posts count: Retry would otherwise publish them without it.
+ * Delete a file unless an idea or a post that can still go out needs it.
+ * Failed and partial posts count: Retry would otherwise publish them without it.
  */
 export async function deleteMediaIfUnused(mediaId: string): Promise<{ error?: string }> {
   const [used] = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from posts
-    where status in ('draft', 'scheduled', 'failed', 'partial') and (content::text like ${"%" + mediaId + "%"}
-      or exists (select 1 from post_targets t where t.post_id = posts.post_id and t.content_override::text like ${"%" + mediaId + "%"}))`);
-  if (used.n > 0) return { error: "Used by a post that hasn't fully gone out" };
+    select (select count(*) from posts
+      where status in ('draft', 'scheduled', 'failed', 'partial') and (content::text like ${"%" + mediaId + "%"}
+        or exists (select 1 from post_targets t where t.post_id = posts.post_id and t.content_override::text like ${"%" + mediaId + "%"})))
+      + (select count(*) from ideas where media_ids::text like ${"%" + mediaId + "%"}) as n`);
+  if (Number(used.n) > 0) return { error: "Used by an idea or a post that hasn't fully gone out" };
   const [row] = await db.delete(schema.media).where(eq(schema.media.mediaId, mediaId)).returning();
   if (row) await deleteMediaFiles(row.fileName);
   return {};

@@ -139,6 +139,38 @@ export const snippets = pgTable("snippets", {
   createdAt: createdAt(),
 });
 
+export const ideaGroups = pgTable("idea_groups", {
+  ideaGroupId: uuid("idea_group_id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  createdAt: createdAt(),
+});
+
+export const ideas = pgTable("ideas", {
+  ideaId: uuid("idea_id").primaryKey().defaultRandom(),
+  // null = Unsorted. Deleting a group keeps its ideas.
+  ideaGroupId: uuid("idea_group_id").references(() => ideaGroups.ideaGroupId, { onDelete: "set null" }),
+  title: text("title").notNull().default(""),
+  text: text("text").notNull().default(""),
+  mediaIds: jsonb("media_ids").$type<string[]>().notNull().default([]),
+  networks: jsonb("networks").$type<string[]>().notNull().default([]),
+  targetAt: timestamp("target_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ideaTags = pgTable(
+  "idea_tags",
+  {
+    ideaId: uuid("idea_id")
+      .notNull()
+      .references(() => ideas.ideaId, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.tagId, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.ideaId, t.tagId] })],
+);
+
 export const queueSlots = pgTable("queue_slots", {
   queueSlotId: uuid("queue_slot_id").primaryKey().defaultRandom(),
   dayOfWeek: smallint("day_of_week").notNull(), // 0 = Sunday
