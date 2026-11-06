@@ -12,6 +12,7 @@ export const NETWORK_IDS = [
   "pinterest",
   "youtube",
   "tiktok",
+  "deviantart",
   "bluesky",
   "mastodon",
 ] as const;
@@ -39,7 +40,7 @@ export type NetworkInfo = {
   maxVideos: number;
   /** Images and a video in one post? */
   mixedMedia: boolean;
-  requiresMedia: "none" | "any" | "video";
+  requiresMedia: "none" | "any" | "image" | "video";
   imageMimes: string[];
   threads: boolean;
   firstComment: boolean;
@@ -253,6 +254,53 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
     ],
     warning: "Unaudited TikTok apps can only direct-post privately (Only me). Inbox mode lets you publish publicly from the app.",
   },
+  deviantart: {
+    id: "deviantart",
+    label: "DeviantArt",
+    // ponytail: the docs give no description limit, so this is a cautious
+    // guess. Raise it if DeviantArt turns out to allow more.
+    maxChars: 5000,
+    count: codePoints,
+    maxImages: 1,
+    maxVideos: 0,
+    mixedMedia: false,
+    requiresMedia: "image",
+    imageMimes: ["image/jpeg", "image/png", "image/gif"],
+    threads: false,
+    firstComment: false,
+    connectKind: "oauth",
+    options: [
+      { key: "title", label: "Title", type: "text", required: true, help: "Up to 50 characters." },
+      {
+        key: "tags",
+        label: "Tags",
+        type: "text",
+        help: "Letters, numbers and underscores, separated by spaces or commas.",
+      },
+      {
+        key: "mature",
+        label: "Mature content",
+        type: "select",
+        default: "none",
+        choices: [
+          { value: "none", label: "None" },
+          { value: "moderate", label: "Moderate" },
+          { value: "strict", label: "Strict" },
+        ],
+      },
+      {
+        key: "aiGenerated",
+        label: "AI-generated",
+        type: "checkbox",
+        // Reason: optionErrors checks these, so an MCP client sending "yes"
+        // gets an error instead of silently losing the label.
+        choices: [
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ],
+      },
+    ],
+  },
   bluesky: {
     id: "bluesky",
     label: "Bluesky",
@@ -306,6 +354,39 @@ export function maxCharsFor(id: NetworkId, meta?: Record<string, unknown>): numb
   return NETWORKS[id].maxChars;
 }
 
+/** Tags from the composer's free-text field, without any leading "#". */
+export function deviantArtTags(raw = ""): string[] {
+  return raw
+    .split(/[\s,]+/)
+    .map((tag) => tag.replace(/^#/, ""))
+    .filter(Boolean);
+}
+
+/** The parts of an account's meta safe to show. The rest can hold secrets. */
+export function safeMeta(meta: Record<string, unknown>): Record<string, unknown> {
+  const safe = ["boards", "maxChars", "maxMedia", "subscriptionType", "handle"];
+  return Object.fromEntries(Object.entries(meta).filter(([k]) => safe.includes(k)));
+}
+
+/**
+ * Options a network wouldn't understand. Publishers read only the keys they
+ * know, so a typo like `privacy` on Mastodon would silently post publicly.
+ */
+export function optionErrors(id: NetworkId, options: Record<string, string>): string[] {
+  const { label, options: fields } = NETWORKS[id];
+  return Object.entries(options).flatMap(([key, value]) => {
+    const field = fields.find((f) => f.key === key);
+    if (!field) {
+      const valid = fields.map((f) => f.key).join(", ") || "none";
+      return [`${label}: unknown option "${key}" (valid: ${valid})`];
+    }
+    if (field.choices && !field.choices.some((c) => c.value === value)) {
+      return [`${label}: ${key} must be one of ${field.choices.map((c) => c.value).join(", ")}`];
+    }
+    return [];
+  });
+}
+
 export type MediaLike = { kind: "image" | "video"; mime: string; width: number | null; height: number | null };
 
 /** Problems with a post part for a network, as human-readable strings. */
@@ -326,6 +407,7 @@ export function validatePart(
   if (videos.length > n.maxVideos) errors.push(`${n.label}: at most ${n.maxVideos} video`);
   if (!n.mixedMedia && images.length && videos.length) errors.push(`${n.label}: can't mix images and video`);
   if (n.requiresMedia === "any" && !part.media.length) errors.push(`${n.label}: needs an image or video`);
+  if (n.requiresMedia === "image" && !images.length) errors.push(`${n.label}: needs an image`);
   if (n.requiresMedia === "video" && !videos.length) errors.push(`${n.label}: needs a video`);
   if (n.imageMimes.length && images.some((m) => !n.imageMimes.includes(m.mime) && id !== "instagram")) {
     errors.push(`${n.label}: unsupported image type`);
@@ -354,5 +436,11 @@ export function validatePart(
   }
   if (id === "youtube" && (options.title ?? "").length > 100) errors.push("YouTube: title is over 100 characters");
   if (id === "pinterest" && (options.title ?? "").length > 100) errors.push("Pinterest: title is over 100 characters");
+  if (id === "deviantart") {
+    if ((options.title ?? "").length > 50) errors.push("DeviantArt: title is over 50 characters");
+    if (deviantArtTags(options.tags).some((tag) => !/^\w+$/.test(tag))) {
+      errors.push("DeviantArt: tags can use only letters, numbers and underscores");
+    }
+  }
   return [...new Set(errors)];
 }

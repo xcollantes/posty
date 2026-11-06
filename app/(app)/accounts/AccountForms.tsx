@@ -2,7 +2,7 @@
 
 import { LinkIcon, Pause, Play, RefreshCw, Unplug } from "lucide-react";
 import { useState, useTransition } from "react";
-import { connectWithForm, disconnectAccount, refreshAccount, setAccountActive } from "@/app/actions/accounts";
+import { connectWithForm, disconnectAccount, moveAccount, refreshAccount, setAccountActive } from "@/app/actions/accounts";
 
 type Field = { name: string; label: string; type?: string; placeholder?: string; help?: string };
 
@@ -71,10 +71,13 @@ export function AccountRowActions({
   socialAccountId,
   isActive,
   reconnectHref,
+  moveTo,
 }: {
   socialAccountId: string;
   isActive: boolean;
   reconnectHref: string | null;
+  /** The other workspaces this account can move to. */
+  moveTo: { workspaceId: string; name: string }[];
 }) {
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -124,6 +127,28 @@ export function AccountRowActions({
           <Unplug className="size-4" />
         </button>
       </div>
+      {moveTo.length > 0 && (
+        <select
+          aria-label="Move to workspace"
+          className="input mt-1 w-full py-1 text-xs"
+          value=""
+          disabled={pending}
+          onChange={(e) => {
+            const to = e.target.value;
+            start(async () => {
+              const res = await moveAccount(socialAccountId, to);
+              setMessage(res.error ?? null);
+            });
+          }}
+        >
+          <option value="">Move to…</option>
+          {moveTo.map((w) => (
+            <option key={w.workspaceId} value={w.workspaceId}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+      )}
       {message && <p className="mt-1 max-w-xs text-xs text-danger">{message}</p>}
     </div>
   );

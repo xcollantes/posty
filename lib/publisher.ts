@@ -79,9 +79,12 @@ export async function publishTarget(postTargetId: string): Promise<void> {
     if (!account.isActive) throw new NetworkError("Account is disabled");
     const acct = await withFreshToken(account.socialAccountId);
     for (const [i, part] of parts.entries()) {
+      const media = await loadMedia(part.mediaIds);
+      // Reason: loadMedia skips missing files, and this would post without them.
+      if (media.length !== part.mediaIds.length) throw new NetworkError("An attached file no longer exists");
       const result: PublishResult = await network.publish(
         acct,
-        { text: part.text, media: await loadMedia(part.mediaIds) },
+        { text: part.text, media },
         {
           idempotencyKey: `${postTargetId}-${i}`,
           options,
@@ -178,7 +181,7 @@ const DAY = 86_400_000;
 
 /**
  * Keep long-lived tokens alive without waiting for a post:
- * IG/Threads extend before day 60, Pinterest before day 30, and rotating
+ * Threads extends before day 60, Pinterest before day 30, and rotating
  * refresh tokens (X, TikTok) are exercised monthly.
  */
 export async function refreshSweep() {

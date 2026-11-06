@@ -15,6 +15,21 @@ import {
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 
+export const workspaces = pgTable("workspaces", {
+  workspaceId: uuid("workspace_id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  createdAt: createdAt(),
+});
+
+/**
+ * Accounts, posts, ideas and media block deleting their workspace, so nothing
+ * real is lost by accident. Settings-like rows (tags, snippets...) go with it.
+ */
+const workspaceId = (onDelete: "restrict" | "cascade") =>
+  uuid("workspace_id")
+    .notNull()
+    .references(() => workspaces.workspaceId, { onDelete });
+
 export const users = pgTable("users", {
   userId: uuid("user_id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
@@ -36,6 +51,7 @@ export const socialAccounts = pgTable(
   "social_accounts",
   {
     socialAccountId: uuid("social_account_id").primaryKey().defaultRandom(),
+    workspaceId: workspaceId("restrict"),
     network: text("network").notNull(),
     providerAccountId: text("provider_account_id").notNull(),
     name: text("name").notNull(),
@@ -57,6 +73,7 @@ export const socialAccounts = pgTable(
 
 export const media = pgTable("media", {
   mediaId: uuid("media_id").primaryKey().defaultRandom(),
+  workspaceId: workspaceId("restrict"),
   fileName: text("file_name").notNull(),
   originalName: text("original_name").notNull(),
   mime: text("mime").notNull(),
@@ -73,6 +90,7 @@ export type PostContent = { parts: PostPart[] };
 
 export const posts = pgTable("posts", {
   postId: uuid("post_id").primaryKey().defaultRandom(),
+  workspaceId: workspaceId("restrict"),
   // draft | scheduled | published | partial | failed
   status: text("status").notNull().default("draft"),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
@@ -112,11 +130,16 @@ export const postTargets = pgTable(
   ],
 );
 
-export const tags = pgTable("tags", {
-  tagId: uuid("tag_id").primaryKey().defaultRandom(),
-  name: text("name").notNull().unique(),
-  color: text("color").notNull().default("#0ea5e9"),
-});
+export const tags = pgTable(
+  "tags",
+  {
+    tagId: uuid("tag_id").primaryKey().defaultRandom(),
+    workspaceId: workspaceId("cascade"),
+    name: text("name").notNull(),
+    color: text("color").notNull().default("#0ea5e9"),
+  },
+  (t) => [uniqueIndex("tags_workspace_name").on(t.workspaceId, t.name)],
+);
 
 export const postTags = pgTable(
   "post_tags",
@@ -133,14 +156,54 @@ export const postTags = pgTable(
 
 export const snippets = pgTable("snippets", {
   snippetId: uuid("snippet_id").primaryKey().defaultRandom(),
+  workspaceId: workspaceId("cascade"),
   kind: text("kind").notNull(), // hashtags | template
   name: text("name").notNull(),
   body: text("body").notNull(),
   createdAt: createdAt(),
 });
 
+export const ideaGroups = pgTable(
+  "idea_groups",
+  {
+    ideaGroupId: uuid("idea_group_id").primaryKey().defaultRandom(),
+    workspaceId: workspaceId("cascade"),
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("idea_groups_workspace_name").on(t.workspaceId, t.name)],
+);
+
+export const ideas = pgTable("ideas", {
+  ideaId: uuid("idea_id").primaryKey().defaultRandom(),
+  workspaceId: workspaceId("restrict"),
+  // null = Unsorted. Deleting a group keeps its ideas.
+  ideaGroupId: uuid("idea_group_id").references(() => ideaGroups.ideaGroupId, { onDelete: "set null" }),
+  title: text("title").notNull().default(""),
+  text: text("text").notNull().default(""),
+  mediaIds: jsonb("media_ids").$type<string[]>().notNull().default([]),
+  networks: jsonb("networks").$type<string[]>().notNull().default([]),
+  targetAt: timestamp("target_at", { withTimezone: true }),
+  createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ideaTags = pgTable(
+  "idea_tags",
+  {
+    ideaId: uuid("idea_id")
+      .notNull()
+      .references(() => ideas.ideaId, { onDelete: "cascade" }),
+    tagId: uuid("tag_id")
+      .notNull()
+      .references(() => tags.tagId, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.ideaId, t.tagId] })],
+);
+
 export const queueSlots = pgTable("queue_slots", {
   queueSlotId: uuid("queue_slot_id").primaryKey().defaultRandom(),
+  workspaceId: workspaceId("cascade"),
   dayOfWeek: smallint("day_of_week").notNull(), // 0 = Sunday
   time: text("time").notNull(), // HH:MM in the user's timezone
 });

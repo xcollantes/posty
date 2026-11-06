@@ -4,7 +4,7 @@ Posty posts to Facebook **Pages**, not personal profiles, through a Meta
 developer app that you own. You create the app once, copy its ID and secret
 into `.env`, and then connect as many Pages as you manage.
 
-Instagram uses a separate app with Instagram Login, so don't add any
+Instagram uses a separate app with Unified login, so don't add any
 Instagram use case here. See [Instagram](instagram.md).
 
 Dashboard paths were checked on 2026-11-04. Meta moves menus around; if one

@@ -1,10 +1,11 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, open, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import sharp from "sharp";
+import { sign, unsign } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
 import { mediaDir, publicMediaBase } from "@/lib/env";
 
@@ -25,6 +26,7 @@ EXT_MIME.jpeg = "image/jpeg";
 export const MEDIA_NAME_RE = /^[0-9a-f-]{36}(\.ig)?\.(jpg|jpeg|png|webp|gif|mp4|mov)$/;
 
 export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GB
+export const MAX_ALT_TEXT = 1500;
 
 export type MediaItem = {
   mediaId: string;
@@ -67,22 +69,65 @@ export async function loadMedia(ids: string[]): Promise<MediaItem[]> {
   return ids.flatMap((id) => (byId.has(id) ? [toItem(byId.get(id)!)] : []));
 }
 
+/** Which of these ids aren't files in this workspace. */
+export async function unknownMedia(ids: string[], workspaceId: string): Promise<string[]> {
+  if (!ids.length) return [];
+  const rows = await db
+    .select({ id: schema.media.mediaId })
+    .from(schema.media)
+    .where(and(inArray(schema.media.mediaId, ids), eq(schema.media.workspaceId, workspaceId)));
+  const found = new Set(rows.map((r) => r.id));
+  return ids.filter((id) => !found.has(id));
+}
+
 type UploadInput = {
+  workspaceId: string;
   body: ReadableStream<Uint8Array>;
-  mime: string;
   originalName: string;
+  altText?: string;
   // Reason: the browser already knows video dimensions/duration, so we
   // take them from the client instead of shipping ffprobe.
   videoMeta?: { width?: number; height?: number; durationSeconds?: number };
 };
 
+/**
+ * What a file really is, from its first 12 bytes. Browsers label files by
+ * extension and remote servers can say anything, so neither label is used.
+ */
+export function sniffMime(head: Buffer): string | null {
+  const text = (from: number, to: number) => head.toString("latin1", from, to);
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "image/jpeg";
+  if (text(0, 8) === "\x89PNG\r\n\x1a\n") return "image/png";
+  if (text(0, 4) === "GIF8") return "image/gif";
+  if (text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return "image/webp";
+  const box = text(4, 8);
+  if (box === "ftyp") {
+    const brand = text(8, 12);
+    // Reason: HEIC, AVIF and M4A share MP4's container but no network takes them as video.
+    if (/^(hei|hev|mif|msf|avi|M4A|M4B|M4P)/.test(brand)) return null;
+    return brand === "qt  " ? "video/quicktime" : "video/mp4";
+  }
+  // Older QuickTime files start straight in with one of these boxes.
+  return ["moov", "mdat", "wide", "free", "skip"].includes(box) ? "video/quicktime" : null;
+}
+
+async function readHead(filePath: string): Promise<Buffer> {
+  const file = await open(filePath);
+  try {
+    const { buffer, bytesRead } = await file.read(Buffer.alloc(12), 0, 12, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await file.close();
+  }
+}
+
 export async function saveUpload(input: UploadInput): Promise<Row> {
-  const ext = MIME_EXT[input.mime];
-  if (!ext) throw new Error(`Unsupported file type: ${input.mime}`);
   await mkdir(mediaDir(), { recursive: true });
   const mediaId = crypto.randomUUID();
-  const fileName = `${mediaId}.${ext}`;
-  const filePath = mediaPath(fileName);
+  // Reason: the real extension isn't known until the bytes are in. MEDIA_NAME_RE
+  // refuses .part, so a half-written file can't be served.
+  const partPath = mediaPath(`${mediaId}.part`);
+  let savedPath: string | null = null;
 
   let size = 0;
   const limit = new Transform({
@@ -95,37 +140,80 @@ export async function saveUpload(input: UploadInput): Promise<Row> {
     await pipeline(
       Readable.fromWeb(input.body as import("node:stream/web").ReadableStream),
       limit,
-      createWriteStream(filePath),
+      createWriteStream(partPath),
     );
+
+    const mime = sniffMime(await readHead(partPath));
+    if (!mime) throw new Error("Unsupported file type: use JPEG, PNG, WebP, GIF, MP4 or MOV");
+
+    let width = input.videoMeta?.width ?? null;
+    let height = input.videoMeta?.height ?? null;
+    if (mime.startsWith("image/")) {
+      const meta = await sharp(partPath).metadata();
+      width = meta.autoOrient?.width ?? meta.width ?? null;
+      height = meta.autoOrient?.height ?? meta.height ?? null;
+    }
+
+    const fileName = `${mediaId}.${MIME_EXT[mime]}`;
+    savedPath = mediaPath(fileName);
+    await rename(partPath, savedPath);
+
+    const [row] = await db
+      .insert(schema.media)
+      .values({
+        workspaceId: input.workspaceId,
+        mediaId,
+        fileName,
+        originalName: input.originalName.slice(0, 200),
+        mime,
+        sizeBytes: size,
+        width,
+        height,
+        durationSeconds: input.videoMeta?.durationSeconds
+          ? Math.round(input.videoMeta.durationSeconds)
+          : null,
+        altText: (input.altText ?? "").slice(0, MAX_ALT_TEXT),
+      })
+      .returning();
+    return row;
   } catch (err) {
-    await rm(filePath, { force: true });
+    await rm(partPath, { force: true });
+    if (savedPath) await rm(savedPath, { force: true });
     throw err;
   }
+}
 
-  let width = input.videoMeta?.width ?? null;
-  let height = input.videoMeta?.height ?? null;
-  if (input.mime.startsWith("image/")) {
-    const meta = await sharp(filePath).metadata();
-    width = meta.autoOrient?.width ?? meta.width ?? null;
-    height = meta.autoOrient?.height ?? meta.height ?? null;
-  }
+const UPLOAD_PURPOSE = "media-upload";
+export const UPLOAD_GRANT_SECONDS = 15 * 60;
 
-  const [row] = await db
-    .insert(schema.media)
-    .values({
-      mediaId,
-      fileName,
-      originalName: input.originalName.slice(0, 200),
-      mime: input.mime,
-      sizeBytes: size,
-      width,
-      height,
-      durationSeconds: input.videoMeta?.durationSeconds
-        ? Math.round(input.videoMeta.durationSeconds)
-        : null,
-    })
-    .returning();
-  return row;
+/**
+ * Lets the holder POST one file's bytes to /api/media without a session, for
+ * clients that can run curl but have no cookie.
+ * ponytail: reusable until it expires; store used grants if that ever matters.
+ */
+export const createUploadGrant = (workspaceId: string, name: string, altText = "") =>
+  sign({ purpose: UPLOAD_PURPOSE, workspaceId, name, altText }, UPLOAD_GRANT_SECONDS);
+
+/** The grant in `token`, or null. `purpose` keeps out tokens signed for anything else. */
+export function readUploadGrant(token: string | null): { workspaceId: string; name: string; altText: string } | null {
+  const grant = unsign<{ purpose?: string; workspaceId: string; name: string; altText: string }>(token ?? undefined);
+  return grant?.purpose === UPLOAD_PURPOSE ? grant : null;
+}
+
+/**
+ * Delete a file unless an idea or a post that can still go out needs it.
+ * Failed and partial posts count: Retry would otherwise publish them without it.
+ */
+export async function deleteMediaIfUnused(mediaId: string): Promise<{ error?: string }> {
+  const [used] = await db.execute<{ n: number }>(sql`
+    select (select count(*) from posts
+      where status in ('draft', 'scheduled', 'failed', 'partial') and (content::text like ${"%" + mediaId + "%"}
+        or exists (select 1 from post_targets t where t.post_id = posts.post_id and t.content_override::text like ${"%" + mediaId + "%"})))
+      + (select count(*) from ideas where media_ids::text like ${"%" + mediaId + "%"}) as n`);
+  if (Number(used.n) > 0) return { error: "Used by an idea or a post that hasn't fully gone out" };
+  const [row] = await db.delete(schema.media).where(eq(schema.media.mediaId, mediaId)).returning();
+  if (row) await deleteMediaFiles(row.fileName);
+  return {};
 }
 
 export async function deleteMediaFiles(fileName: string) {

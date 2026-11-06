@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Trash2 } from "lucide-react";
 import { createTag, deleteTag } from "@/app/actions/library";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
 import { Card, Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
+import { requireWorkspace } from "@/lib/workspaces";
 
 export const metadata: Metadata = { title: "Tags" };
 
@@ -13,11 +13,10 @@ export const metadata: Metadata = { title: "Tags" };
 const SWATCH = ["#f8d948", "#ef8132", "#e9336a", "#c127bf", "#6e3cf1"];
 
 export default async function TagsPage() {
-  await requireUser();
-  const tags = await db.select().from(schema.tags).orderBy(asc(schema.tags.name));
+  const { workspaceId } = await requireWorkspace();
+  const tags = await db.select().from(schema.tags).where(eq(schema.tags.workspaceId, workspaceId)).orderBy(asc(schema.tags.name));
   return (
     <Page
-      eyebrow="Library"
       title="Tags"
       description="Group posts by campaign or topic. A tag's color marks its posts on the calendar."
     >

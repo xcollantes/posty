@@ -14,8 +14,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <Logo className="mx-auto size-12" />
-          <p className="eyebrow mt-6">Welcome back</p>
-          <h1 className="mt-2">Sign in to Posty</h1>
+          <h1 className="mt-6">Sign in to Posty</h1>
         </div>
         <div className="card p-6">
           <LoginForm next={typeof next === "string" ? next : ""} />

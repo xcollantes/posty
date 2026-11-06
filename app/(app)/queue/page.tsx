@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { and, asc, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, isNotNull, ne } from "drizzle-orm";
 import { CalendarClock, X } from "lucide-react";
 import { addQueueSlot, deleteQueueSlot } from "@/app/actions/library";
 import { ActionForm } from "@/components/ActionForm";
 import { Card, Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
 import { nextFreeSlot } from "@/lib/queue";
+import { requireWorkspace } from "@/lib/workspaces";
 
 export const metadata: Metadata = { title: "Queue" };
 
@@ -21,12 +21,16 @@ const fmtTime = (hhmm: string) => {
 };
 
 export default async function QueuePage() {
-  const user = await requireUser();
-  const slots = await db.select().from(schema.queueSlots).orderBy(asc(schema.queueSlots.time));
+  const { user, workspaceId } = await requireWorkspace();
+  const slots = await db
+    .select()
+    .from(schema.queueSlots)
+    .where(eq(schema.queueSlots.workspaceId, workspaceId))
+    .orderBy(asc(schema.queueSlots.time));
   const taken = await db
     .select({ at: schema.posts.scheduledAt })
     .from(schema.posts)
-    .where(and(isNotNull(schema.posts.scheduledAt), ne(schema.posts.status, "draft")));
+    .where(and(eq(schema.posts.workspaceId, workspaceId), isNotNull(schema.posts.scheduledAt), ne(schema.posts.status, "draft")));
 
   // The next few free times, as "Add to queue" would hand them out.
   const upcoming: Date[] = [];
@@ -47,7 +51,6 @@ export default async function QueuePage() {
 
   return (
     <Page
-      eyebrow="Publish"
       title="Queue"
       description={
         <>

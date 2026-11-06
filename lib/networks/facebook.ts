@@ -5,7 +5,7 @@ import { NETWORKS } from "./catalog";
 import { creds, type FetchOptions, fetchJson, NetworkError, url } from "./http";
 import type { Account, Network, PublishResult } from "./types";
 
-const GRAPH = "https://graph.facebook.com/v26.0";
+export const GRAPH = "https://graph.facebook.com/v26.0";
 const GRAPH_VIDEO = "https://graph-video.facebook.com/v26.0";
 const RUPLOAD = "https://rupload.facebook.com/video-upload/v26.0";
 const SCOPES =

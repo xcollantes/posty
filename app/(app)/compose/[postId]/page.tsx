@@ -1,24 +1,28 @@
 import type { Metadata } from "next";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { Composer } from "@/components/composer/Composer";
 import { Page } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
+import { requireWorkspace } from "@/lib/workspaces";
 import { composerData, mediaForIds } from "../data";
 
 export const metadata: Metadata = { title: "Edit post" };
 
 export default async function EditPostPage({ params }: PageProps<"/compose/[postId]">) {
-  const user = await requireUser();
+  const { user, workspaceId } = await requireWorkspace();
   const { postId } = await params;
   if (!/^[0-9a-f-]{36}$/.test(postId)) notFound();
-  const [post] = await db.select().from(schema.posts).where(eq(schema.posts.postId, postId));
+  // Reason: never edit a post from a different workspace than the header shows.
+  const [post] = await db
+    .select()
+    .from(schema.posts)
+    .where(and(eq(schema.posts.postId, postId), eq(schema.posts.workspaceId, workspaceId)));
   if (!post) notFound();
   const [targets, tags, data] = await Promise.all([
     db.select().from(schema.postTargets).where(eq(schema.postTargets.postId, postId)),
     db.select().from(schema.postTags).where(eq(schema.postTags.postId, postId)),
-    composerData(user.timezone, postId),
+    composerData(workspaceId, user.timezone, postId),
   ]);
 
   const ids = [
@@ -30,7 +34,6 @@ export default async function EditPostPage({ params }: PageProps<"/compose/[post
 
   return (
     <Page
-      eyebrow={readOnly ? "Published" : "Create"}
       title={readOnly ? "Post" : post.status === "draft" ? "Edit draft" : "Edit post"}
     >
       <Composer
