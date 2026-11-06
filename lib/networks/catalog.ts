@@ -288,7 +288,17 @@ export const NETWORKS: Record<NetworkId, NetworkInfo> = {
           { value: "strict", label: "Strict" },
         ],
       },
-      { key: "aiGenerated", label: "AI-generated", type: "checkbox" },
+      {
+        key: "aiGenerated",
+        label: "AI-generated",
+        type: "checkbox",
+        // Reason: optionErrors checks these, so an MCP client sending "yes"
+        // gets an error instead of silently losing the label.
+        choices: [
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ],
+      },
     ],
   },
   bluesky: {

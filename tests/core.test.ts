@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { bearerOk, decrypt, encrypt, hashPassword, sign, unsign, verifyPassword } from "@/lib/crypto";
 import { MEDIA_NAME_RE, parseRange } from "@/lib/media";
 import { findFacets } from "@/lib/networks/bluesky";
-import { NETWORKS, validatePart } from "@/lib/networks/catalog";
+import { NETWORKS, optionErrors, validatePart } from "@/lib/networks/catalog";
 import { nextFreeSlot } from "@/lib/queue";
 import { applyStyle, countWithUrls, graphemes, threadsCount, toPlain } from "@/lib/text";
 
@@ -156,6 +156,19 @@ describe("validation", () => {
     expect(da({ title: "Art", tags: "sci-fi" })).toContain(
       "DeviantArt: tags can use only letters, numbers and underscores",
     );
+  });
+  it("rejects a DeviantArt AI label that wouldn't be applied", () => {
+    expect(optionErrors("deviantart", { aiGenerated: "yes" })).toEqual([
+      "DeviantArt: aiGenerated must be one of true, false",
+    ]);
+    expect(
+      optionErrors("deviantart", {
+        title: "Art",
+        tags: "art",
+        mature: "strict",
+        aiGenerated: "false",
+      }),
+    ).toEqual([]);
   });
 });
 
