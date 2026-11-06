@@ -1,6 +1,7 @@
 import type { NetworkId } from "./catalog";
 import type { Network } from "./types";
 import { bluesky } from "./bluesky";
+import { deviantart } from "./deviantart";
 import { facebook } from "./facebook";
 import { instagram } from "./instagram";
 import { linkedin } from "./linkedin";
@@ -20,6 +21,7 @@ export const networks: Record<NetworkId, Network> = {
   pinterest,
   youtube,
   tiktok,
+  deviantart,
   bluesky,
   mastodon,
 };

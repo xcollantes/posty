@@ -144,6 +144,19 @@ describe("validation", () => {
   it("requires a Pinterest board", () => {
     expect(validatePart("pinterest", { text: "", media: [img(100, 100)] }, {})).toContain("Pinterest: Board is required");
   });
+  it("checks DeviantArt media, title and tags", () => {
+    const da = (options: Record<string, string>, media = [img(100, 100)]) =>
+      validatePart("deviantart", { text: "hi", media }, options);
+    expect(da({ title: "Art", tags: "#art, my_tag" })).toEqual([]);
+    expect(da({ title: "Art" }, [])).toContain("DeviantArt: needs an image");
+    expect(da({})).toContain("DeviantArt: Title is required");
+    expect(da({ title: "a".repeat(51) })).toContain(
+      "DeviantArt: title is over 50 characters",
+    );
+    expect(da({ title: "Art", tags: "sci-fi" })).toContain(
+      "DeviantArt: tags can use only letters, numbers and underscores",
+    );
+  });
 });
 
 describe("login throttle", () => {
