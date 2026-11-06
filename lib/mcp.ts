@@ -127,7 +127,7 @@ export function buildServer(user: CurrentUser): McpServer {
         "Create a post, or edit a draft or scheduled post when postId is given. " +
         "mode=draft saves without scheduling, schedule needs scheduledAt, queue takes the next free " +
         "queue slot. More than one part makes a thread on X, Threads, Bluesky and Mastodon; other " +
-        "networks use the first part. Instagram, Pinterest, YouTube and TikTok need media. " +
+        "networks use the first part. Instagram, Pinterest, YouTube, TikTok and DeviantArt need media. " +
         "Validation errors come back as text: fix the input and call again.",
       inputSchema: z.object({
         parts: z
