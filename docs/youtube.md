@@ -39,7 +39,7 @@ the app isn't verified; that's expected for a personal app.
    **Create client**.
 2. **Application type**: **Web application**. Name it `Posty`.
 3. Under **Authorized redirect URIs**, click **Add URI** and paste the URI
-   from Posty's Accounts page (YouTube row → **Redirect URI**):
+   from Posty's Accounts page (YouTube card → **Redirect URI**):
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/youtube/callback
@@ -55,7 +55,7 @@ the app isn't verified; that's expected for a personal app.
 
 ## 4. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the YouTube row.
+1. In Posty, open **Accounts** and click **Connect** in the YouTube card.
 2. Choose your Google account and channel.
 3. At **Google hasn't verified this app**, click **Advanced**, then **Go to
    Posty (unsafe)**. It's your own app.

@@ -33,7 +33,7 @@ OpenID Connect added](images/linkedin-products.png)
 1. Open the **Auth** tab.
 2. Under **OAuth 2.0 settings**, click the pencil next to **Authorized
    redirect URLs for your app** and add the URI from Posty's Accounts page
-   (LinkedIn row → **Redirect URI**):
+   (LinkedIn card → **Redirect URI**):
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/linkedin/callback
@@ -55,7 +55,7 @@ URL](images/linkedin-auth.png)
 
 ## 4. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the LinkedIn row.
+1. In Posty, open **Accounts** and click **Connect** in the LinkedIn card.
 2. Sign in to LinkedIn and click **Allow**.
 3. Publish a short test post.
 

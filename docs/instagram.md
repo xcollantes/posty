@@ -38,7 +38,7 @@ back.
 2. Under **Set up Instagram business login**, open **Business login
    settings**.
 3. In **OAuth redirect URIs**, add the URI from Posty's Accounts page
-   (Instagram row → **Redirect URI**):
+   (Instagram card → **Redirect URI**):
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/instagram/callback
@@ -71,7 +71,7 @@ While the app is in development, only testers can connect.
 
 ## 6. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the Instagram row.
+1. In Posty, open **Accounts** and click **Connect** in the Instagram card.
 2. Log in to Instagram and allow the permissions.
 3. Schedule a test post with one image. In the composer's Instagram tab,
    pick **Feed**, **Reel** or **Story**.

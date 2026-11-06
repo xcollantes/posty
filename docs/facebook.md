@@ -40,7 +40,7 @@ isn't where this guide says, look for the same words nearby.
    ```
 
    Posty's **Accounts** page shows the exact URI: open **Redirect URI** in
-   the Facebook Page row. Copy it from there, since it must match character
+   the Facebook Page card. Copy it from there, since it must match character
    for character.
 3. Click **Save changes**.
 
@@ -76,7 +76,7 @@ URL](images/meta-app-settings.png)
 
 3. Restart with `docker compose up -d`.
 
-Until both are set, the Facebook Page row on the Accounts page says "Add
+Until both are set, the Facebook Page card on the Accounts page says "Add
 FACEBOOK_CLIENT_ID and FACEBOOK_CLIENT_SECRET to .env, then restart."
 
 Posty calls Graph API v26.0 explicitly, so the app's default API version
@@ -111,7 +111,7 @@ neither.
 ## 7. Connect and test
 
 1. In Posty, open **Accounts** and click **Connect** in the Facebook Page
-   row.
+   card.
 2. Facebook asks which Pages to share. Select the Pages you want to post
    to, then approve the permissions.
 3. Back in Posty, each Page appears as its own account. Page tokens don't
