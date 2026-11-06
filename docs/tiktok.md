@@ -23,7 +23,7 @@ Photo posts aren't supported: they need a domain verified with TikTok.
 ## 2. Add the redirect URI
 
 In the **Login Kit** settings, add the URI from Posty's Accounts page
-(TikTok row → **Redirect URI**) under **Redirect URI** for **Web**:
+(TikTok card → **Redirect URI**) under **Redirect URI** for **Web**:
 
 ```
 https://posty.<your-tailnet>.ts.net/api/connect/tiktok/callback
@@ -41,7 +41,7 @@ https://posty.<your-tailnet>.ts.net/api/connect/tiktok/callback
 
 ## 4. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the TikTok row.
+1. In Posty, open **Accounts** and click **Connect** in the TikTok card.
 2. Sign in to TikTok and allow access.
 3. Schedule a short test video. In the composer's TikTok tab, keep
    **Mode** on **Send to TikTok inbox (finish in app)**.

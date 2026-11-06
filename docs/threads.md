@@ -26,7 +26,7 @@ same words nearby.
 1. In the left sidebar, open **Use cases**, then **Customize** on **Access
    the Threads API**, then **Settings**.
 2. In **Redirect Callback URLs**, add the URI from Posty's Accounts page
-   (Threads row → **Redirect URI**):
+   (Threads card → **Redirect URI**):
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/threads/callback
@@ -67,7 +67,7 @@ Still in **Customize**, open **Permissions** and add:
 
 ## 6. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the Threads row.
+1. In Posty, open **Accounts** and click **Connect** in the Threads card.
 2. Log in to Threads and allow the permissions.
 3. Publish a short text post. For a thread, click **Add another post to the
    thread** in the composer.

@@ -15,7 +15,7 @@ that you own. The post's text becomes the description.
 3. Choose the **confidential** client type and the **Authorization Code**
    grant.
 4. Under **OAuth2 Redirect URI Whitelist**, add the URI from Posty's Accounts
-   page (DeviantArt row → **Redirect URI**). It must match exactly:
+   page (DeviantArt card → **Redirect URI**). It must match exactly:
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/deviantart/callback
@@ -35,7 +35,7 @@ DEVIANTART_CLIENT_SECRET=<client_secret>
 
 ## 3. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the DeviantArt row.
+1. In Posty, open **Accounts** and click **Connect** in the DeviantArt card.
 2. Approve access on DeviantArt.
 3. In the composer's DeviantArt tab, enter a **Title**, and optionally
    **Tags**, a **Mature content** level and the **AI-generated** label. Then

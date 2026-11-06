@@ -26,9 +26,9 @@ Instagram, Threads and Facebook video also need the
 1. **Create the app** in the network's developer portal.
 2. **Add Posty's redirect URI.** After you approve access, the network sends
    you back to this address. Find it on Posty's **Accounts** page: open
-   **Redirect URI** in the network's row and copy it.
+   **Redirect URI** in the network's card and copy it.
 
-   ![The Redirect URI under the Facebook Page row on the Accounts
+   ![The Redirect URI in the Facebook Page card on the Accounts
    page](images/posty-redirect-uri.png)
 
    It looks like this, and must match character for character:
@@ -46,7 +46,7 @@ Instagram, Threads and Facebook video also need the
    docker compose up -d
    ```
 
-   Until both are set, the network's row on the Accounts page says which
+   Until both are set, the network's card on the Accounts page says which
    keys to add.
 4. **Click Connect** on the Accounts page and approve access.
 
@@ -76,7 +76,7 @@ No developer app needed.
 1. In Bluesky, open **Settings → Privacy and security → App passwords**
    ([direct link](https://bsky.app/settings/app-passwords)) and click
    **Add App Password**. Name it `Posty`.
-2. In Posty, open **Accounts**. In the Bluesky row, enter your handle (for
+2. In Posty, open **Accounts**. In the Bluesky card, enter your handle (for
    example `you.bsky.social`) and the app password, then click
    **Connect**.
 
@@ -87,7 +87,7 @@ fill in its URL.
 
 No keys needed.
 
-1. In Posty, open **Accounts**. In the Mastodon row, enter your instance,
+1. In Posty, open **Accounts**. In the Mastodon card, enter your instance,
    for example `mastodon.social`, and click **Connect**.
 2. Posty registers itself with your instance and sends you there. Sign in
    and click **Authorize**.

@@ -53,7 +53,7 @@ back.
 ## 4. Add the redirect URI
 
 1. On the same tab, under **Redirect URL**, enter the URI from Posty's
-   Accounts page (Instagram row → **Redirect URI**):
+   Accounts page (Instagram card → **Redirect URI**):
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/instagram/callback
@@ -89,7 +89,7 @@ connect.
 
 ## 7. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the Instagram row.
+1. In Posty, open **Accounts** and click **Connect** in the Instagram card.
 2. Log in with Instagram or Facebook. Instagram login needs your password.
 3. Pick the business portfolio and the Instagram account, then allow the
    permissions. Skip the ad account if you're asked for one.

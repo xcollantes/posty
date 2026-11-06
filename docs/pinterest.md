@@ -31,7 +31,7 @@ to terms](images/pinterest-account-setup.png)
 
 1. Open the app from **My apps**.
 2. Under **Redirect URIs**, add the URI from Posty's Accounts page
-   (Pinterest row → **Redirect URI**) and save:
+   (Pinterest card → **Redirect URI**) and save:
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/pinterest/callback
@@ -54,7 +54,7 @@ to terms](images/pinterest-account-setup.png)
 
 ## 4. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the Pinterest row.
+1. In Posty, open **Accounts** and click **Connect** in the Pinterest card.
 2. Click **Give access** on Pinterest.
 3. In the composer's Pinterest tab, pick a **Board**, and optionally a
    **Title** and **Destination link**. Then publish a test pin.

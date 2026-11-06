@@ -25,7 +25,7 @@ for the same words nearby.
 2. **App permissions**: **Read and write**.
 3. **Type of app**: **Web App** (a confidential client).
 4. **Callback URI / Redirect URL**: the URI from Posty's Accounts page
-   (X row → **Redirect URI**):
+   (X card → **Redirect URI**):
 
    ```
    https://posty.<your-tailnet>.ts.net/api/connect/x/callback
@@ -50,7 +50,7 @@ for the same words nearby.
 
 ## 4. Connect and test
 
-1. In Posty, open **Accounts** and click **Connect** in the X row.
+1. In Posty, open **Accounts** and click **Connect** in the X card.
 2. Click **Authorize app** on X.
 3. Publish a short test post without a link.
 
