@@ -1,21 +1,16 @@
 import { fetchUrl } from "@/lib/gcs";
 import { asJpeg, type MediaItem } from "@/lib/media";
 import { NETWORKS } from "./catalog";
-import { metaFetch } from "./facebook";
+import { GRAPH, metaFetch } from "./facebook";
 import { creds, NetworkError, pollUntil, secondsFromNow, url } from "./http";
 import type { Account, Network } from "./types";
-
-const IG = "https://graph.instagram.com/v26.0";
-const SCOPES =
-  "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments,instagram_business_manage_insights";
-const WEEK_MS = 7 * 24 * 3600_000;
 
 type Params = Record<string, string | undefined>;
 
 const get = <T>(token: string, path: string, params: Params = {}) =>
-  metaFetch<T>(url(`${IG}/${path}`, { ...params, access_token: token }));
+  metaFetch<T>(url(`${GRAPH}/${path}`, { ...params, access_token: token }));
 const post = <T>(token: string, path: string, params: Params, final = false) =>
-  metaFetch<T>(`${IG}/${path}`, { method: "POST", form: { ...params, access_token: token }, final });
+  metaFetch<T>(`${GRAPH}/${path}`, { method: "POST", form: { ...params, access_token: token }, final });
 
 /** Create a media container and wait until Instagram has fetched and processed it. */
 async function container(acct: Account, params: Params): Promise<string> {
@@ -40,68 +35,55 @@ export const instagram: Network = {
     kind: "oauth",
     async authorize(ctx) {
       const { clientId } = creds("INSTAGRAM");
+      const configId = process.env.INSTAGRAM_CONFIG_ID;
+      if (!configId) throw new NetworkError("Set INSTAGRAM_CONFIG_ID in .env (see docs/instagram.md)");
       return {
-        url: url("https://www.instagram.com/oauth/authorize", {
+        // The configuration holds the permissions, so there's no `scope` here.
+        url: url("https://www.facebook.com/dialog/oauth", {
           client_id: clientId,
+          config_id: configId,
           redirect_uri: ctx.redirectUri,
-          response_type: "code",
-          scope: SCOPES,
           state: ctx.state,
-          force_reauth: "true", // ask for login even if signed in, so a 2nd account can be added
+          response_type: "code",
+          override_default_response_type: "true",
+          prompt: "login", // offer Instagram and Facebook login, so a 2nd account can be added
         }),
       };
     },
     async exchange(ctx) {
       const { clientId, clientSecret } = creds("INSTAGRAM");
-      type Short = { access_token: string };
-      const res = await metaFetch<Short & { data?: Short[] }>("https://api.instagram.com/oauth/access_token", {
-        method: "POST",
-        form: {
+      const { access_token: token, expires_in } = await metaFetch<{ access_token: string; expires_in?: number }>(
+        url(`${GRAPH}/oauth/access_token`, {
           client_id: clientId,
           client_secret: clientSecret,
-          grant_type: "authorization_code",
           redirect_uri: ctx.redirectUri,
-          code: ctx.code.replace(/#_$/, ""),
-        },
-      });
-      // Reason: docs show the token wrapped in `data[]`; the live API returns it flat.
-      const short = res.data?.[0] ?? res;
-      const long = await metaFetch<{ access_token: string; expires_in: number }>(
-        url("https://graph.instagram.com/access_token", {
-          grant_type: "ig_exchange_token",
-          client_secret: clientSecret,
-          access_token: short.access_token,
+          code: ctx.code,
         }),
       );
-      type Me = { user_id: string; username: string; name?: string; profile_picture_url?: string; account_type?: string };
-      const me = await get<Me>(long.access_token, "me", {
-        fields: "user_id,username,name,profile_picture_url,account_type",
+      // Reason: this is a system-user token, so `/me` isn't the Instagram account.
+      // ponytail: first page only, follow paging.cursors if anyone shares 100+ accounts.
+      const { data } = await get<{ data: { id: string; username: string }[] }>(token, "me/assigned_instagram_accounts", {
+        fields: "id,username",
+        limit: "100",
       });
-      return [
-        {
-          providerAccountId: String(me.user_id),
-          name: me.name || me.username,
-          username: me.username,
-          avatarUrl: me.profile_picture_url ?? null,
-          accessToken: long.access_token,
-          expiresAt: secondsFromNow(long.expires_in),
-          meta: { accountType: me.account_type },
-        },
-      ];
+      return Promise.all(
+        data.map(async ({ id, username }) => {
+          // Reason: Meta only documents id and username here. A missing profile shouldn't block connecting.
+          const profile = await get<{ name?: string; profile_picture_url?: string }>(token, id, {
+            fields: "name,profile_picture_url",
+          }).catch(() => ({ name: undefined, profile_picture_url: undefined }));
+          return {
+            providerAccountId: id,
+            name: profile.name || username,
+            username,
+            avatarUrl: profile.profile_picture_url ?? null,
+            accessToken: token,
+            expiresAt: secondsFromNow(expires_in),
+          };
+        }),
+      );
     },
   },
-
-  async refresh(acct) {
-    const t = await metaFetch<{ access_token: string; expires_in: number }>(
-      url("https://graph.instagram.com/refresh_access_token", {
-        grant_type: "ig_refresh_token",
-        access_token: acct.accessToken,
-      }),
-    );
-    return { accessToken: t.access_token, expiresAt: secondsFromNow(t.expires_in) };
-  },
-
-  shouldRefresh: (acct) => Date.now() - acct.tokenIssuedAt.getTime() > WEEK_MS,
 
   async publish(acct, part, ctx) {
     const type = ctx.options.type || "feed";

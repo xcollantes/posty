@@ -178,7 +178,7 @@ const DAY = 86_400_000;
 
 /**
  * Keep long-lived tokens alive without waiting for a post:
- * IG/Threads extend before day 60, Pinterest before day 30, and rotating
+ * Threads extends before day 60, Pinterest before day 30, and rotating
  * refresh tokens (X, TikTok) are exercised monthly.
  */
 export async function refreshSweep() {
