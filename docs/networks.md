@@ -14,6 +14,7 @@ Pick a guide:
 | [Pinterest](pinterest.md)     | a Pinterest business account                  |
 | [YouTube](youtube.md)         | a Google Cloud project                        |
 | [TikTok](tiktok.md)           | a TikTok account                              |
+| [DeviantArt](deviantart.md)   | a DeviantArt account with a verified email    |
 | [Bluesky](#bluesky)           | an app password                               |
 | [Mastodon](#mastodon)         | your instance's name                          |
 
@@ -58,9 +59,9 @@ Every network can have several accounts: click Connect again for each one.
 
 - **YouTube, Instagram, TikTok, Mastodon**: Posty asks the network to show
   its login or account picker each time, so you can pick another account.
-- **X, LinkedIn, Pinterest, Threads**: these use whichever account this
-  browser is signed in to. Switch accounts (or sign out) on that site
-  first. If you get the same account back, the Accounts page says so.
+- **X, LinkedIn, Pinterest, DeviantArt, Threads**: these use whichever
+  account this browser is signed in to. Switch accounts (or sign out) on that
+  site first. If you get the same account back, the Accounts page says so.
 - **Facebook**: one connect adds every Page you grant. To add Pages later,
   Connect again and select them in the dialog.
 - **Bluesky**: enter the other handle and its app password.

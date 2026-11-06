@@ -1,9 +1,9 @@
 # Posty
 
 Write a post once and publish it to Facebook Pages, Instagram, Threads, X,
-LinkedIn, Pinterest, YouTube, TikTok, Bluesky and Mastodon. Posty is a
-self-hosted scheduler in the spirit of Buffer and Mixpost. It runs in Docker
-and is reachable only from your own Tailscale network.
+LinkedIn, Pinterest, YouTube, TikTok, DeviantArt, Bluesky and Mastodon. Posty
+is a self-hosted scheduler in the spirit of Buffer and Mixpost. It runs in
+Docker and is reachable only from your own Tailscale network.
 
 ![The Posty composer: one post going to five accounts, with a live
 Instagram preview](docs/images/composer.png)
@@ -132,6 +132,7 @@ other network needs a developer app first:
 | [Pinterest](docs/pinterest.md)        | a Pinterest business account      |
 | [YouTube](docs/youtube.md)            | a Google Cloud project            |
 | [TikTok](docs/tiktok.md)              | a TikTok account                  |
+| [DeviantArt](docs/deviantart.md)      | an account with a verified email  |
 | [Bluesky](docs/networks.md#bluesky)   | an app password, no developer app |
 | [Mastodon](docs/networks.md#mastodon) | your instance's name, no app      |
 

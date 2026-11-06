@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { bearerOk, decrypt, encrypt, hashPassword, sign, unsign, verifyPassword } from "@/lib/crypto";
 import { MEDIA_NAME_RE, parseRange } from "@/lib/media";
 import { findFacets } from "@/lib/networks/bluesky";
-import { NETWORKS, validatePart } from "@/lib/networks/catalog";
+import { NETWORKS, optionErrors, validatePart } from "@/lib/networks/catalog";
 import { nextFreeSlot } from "@/lib/queue";
 import { applyStyle, countWithUrls, graphemes, threadsCount, toPlain } from "@/lib/text";
 
@@ -143,6 +143,32 @@ describe("validation", () => {
   });
   it("requires a Pinterest board", () => {
     expect(validatePart("pinterest", { text: "", media: [img(100, 100)] }, {})).toContain("Pinterest: Board is required");
+  });
+  it("checks DeviantArt media, title and tags", () => {
+    const da = (options: Record<string, string>, media = [img(100, 100)]) =>
+      validatePart("deviantart", { text: "hi", media }, options);
+    expect(da({ title: "Art", tags: "#art, my_tag" })).toEqual([]);
+    expect(da({ title: "Art" }, [])).toContain("DeviantArt: needs an image");
+    expect(da({})).toContain("DeviantArt: Title is required");
+    expect(da({ title: "a".repeat(51) })).toContain(
+      "DeviantArt: title is over 50 characters",
+    );
+    expect(da({ title: "Art", tags: "sci-fi" })).toContain(
+      "DeviantArt: tags can use only letters, numbers and underscores",
+    );
+  });
+  it("rejects a DeviantArt AI label that wouldn't be applied", () => {
+    expect(optionErrors("deviantart", { aiGenerated: "yes" })).toEqual([
+      "DeviantArt: aiGenerated must be one of true, false",
+    ]);
+    expect(
+      optionErrors("deviantart", {
+        title: "Art",
+        tags: "art",
+        mature: "strict",
+        aiGenerated: "false",
+      }),
+    ).toEqual([]);
   });
 });
 

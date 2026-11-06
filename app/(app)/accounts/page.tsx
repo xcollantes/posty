@@ -22,6 +22,7 @@ const ENV_PREFIX: Partial<Record<NetworkId, string>> = {
   pinterest: "PINTEREST",
   youtube: "YOUTUBE",
   tiktok: "TIKTOK",
+  deviantart: "DEVIANTART",
 };
 
 const configured = (id: NetworkId) => {
@@ -143,9 +144,9 @@ export default async function AccountsPage({ searchParams }: PageProps<"/account
           hint={
             <>
               Most networks need a developer app first; docs/networks.md has the steps. Bluesky and Mastodon don&apos;t.
-              Connect again to add another account on the same network. X, LinkedIn, Pinterest and Threads use
-              whichever account this browser is signed in to, so switch accounts there first. Facebook and YouTube add
-              everything the login manages, so move any extras to their own workspace.
+              Connect again to add another account on the same network. X, LinkedIn, Pinterest, DeviantArt and Threads
+              use whichever account this browser is signed in to, so switch accounts there first. Facebook and YouTube
+              add everything the login manages, so move any extras to their own workspace.
             </>
           }
         >
