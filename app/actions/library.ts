@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSession, destroySession, requireUser } from "@/lib/auth";
@@ -8,7 +8,7 @@ import { clearLoginFailures, loginBlockedFor, recordLoginFailure } from "@/lib/t
 import { hashPassword, verifyPassword } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
 import { appUrl } from "@/lib/env";
-import { deleteMediaFiles } from "@/lib/media";
+import { deleteMediaIfUnused, MAX_ALT_TEXT } from "@/lib/media";
 import { headers } from "next/headers";
 
 type FormState = { error?: string; ok?: string } | undefined;
@@ -72,20 +72,14 @@ export async function logout() {
 
 export async function updateAltText(mediaId: string, altText: string) {
   await requireUser();
-  await db.update(schema.media).set({ altText: altText.slice(0, 1500) }).where(eq(schema.media.mediaId, mediaId));
+  await db.update(schema.media).set({ altText: altText.slice(0, MAX_ALT_TEXT) }).where(eq(schema.media.mediaId, mediaId));
 }
 
 export async function deleteMedia(mediaId: string): Promise<{ error?: string }> {
   await requireUser();
-  const [used] = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from posts
-    where status in ('draft', 'scheduled') and (content::text like ${"%" + mediaId + "%"}
-      or exists (select 1 from post_targets t where t.post_id = posts.post_id and t.content_override::text like ${"%" + mediaId + "%"}))`);
-  if (used.n > 0) return { error: "Used by a draft or scheduled post" };
-  const [row] = await db.delete(schema.media).where(eq(schema.media.mediaId, mediaId)).returning();
-  if (row) await deleteMediaFiles(row.fileName);
-  revalidatePath("/media-library");
-  return {};
+  const result = await deleteMediaIfUnused(mediaId);
+  if (!result.error) revalidatePath("/media-library");
+  return result;
 }
 
 // ---- Snippets, tags, queue ----
