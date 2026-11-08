@@ -3,6 +3,7 @@
 import { ArrowLeft, Bold, Code, Hash, ImagePlus, Images, Italic, Plus, Trash2, X, type LucideIcon } from "lucide-react";
 import { useRef, useState } from "react";
 import { updateAltText } from "@/app/actions/library";
+import { ExpandableImage } from "@/components/ExpandableImage";
 import type { PostPart } from "@/lib/db/schema";
 import { applyStyle, type TextStyle } from "@/lib/text";
 import { EmojiButton } from "./EmojiButton";
@@ -153,7 +154,7 @@ function PartEditor({
           const text = e.target.value;
           change((p) => ({ ...p, text }));
         }}
-        rows={index === 0 ? 7 : 4}
+        rows={index === 0 ? 12 : 6}
         placeholder={index === 0 ? "Write your post…" : ""}
         className="input block resize-y px-3.5 py-3 text-[15px] leading-relaxed"
         aria-label={total > 1 ? `Post ${index + 1} of ${total}` : "Post text"}
@@ -248,8 +249,7 @@ function PartEditor({
                   {m?.kind === "video" ? (
                     <video src={m.src} className="size-full object-cover" muted preload="metadata" />
                   ) : m ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={m.src} alt={m.altText} className="size-full object-cover" />
+                    <ExpandableImage src={m.src} alt={m.altText} className="size-full object-cover" />
                   ) : (
                     <p className="p-2 text-muted">Missing file</p>
                   )}
