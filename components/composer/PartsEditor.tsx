@@ -154,7 +154,7 @@ function PartEditor({
           const text = e.target.value;
           change((p) => ({ ...p, text }));
         }}
-        rows={index === 0 ? 7 : 4}
+        rows={index === 0 ? 12 : 6}
         placeholder={index === 0 ? "Write your post…" : ""}
         className="input block resize-y px-3.5 py-3 text-[15px] leading-relaxed"
         aria-label={total > 1 ? `Post ${index + 1} of ${total}` : "Post text"}
