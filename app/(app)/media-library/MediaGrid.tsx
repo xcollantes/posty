@@ -3,6 +3,7 @@
 import { CloudUpload, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { deleteMedia, updateAltText } from "@/app/actions/library";
+import { ExpandableImage } from "@/components/ExpandableImage";
 import type { ComposerMedia } from "@/components/composer/types";
 import { uploadFile } from "@/components/composer/upload";
 
@@ -72,8 +73,7 @@ export function MediaGrid({ initial }: { initial: ComposerMedia[] }) {
                 {m.kind === "video" ? (
                   <video src={m.src} controls preload="metadata" className="size-full object-cover" />
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.src} alt={m.altText} className="size-full object-cover" loading="lazy" />
+                  <ExpandableImage src={m.src} alt={m.altText} className="size-full object-cover" />
                 )}
               </div>
               <div className="space-y-2 p-3">
