@@ -10,8 +10,10 @@ const PUBLIC_PREFIXES = ["/login", "/media/", "/api/health", "/api/mcp", "/_next
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Defense in depth: Funnel traffic may only ever reach /media/.
-  if (request.headers.get("tailscale-funnel-request") && !pathname.startsWith("/media/")) {
+  // Funnel opens the whole host to the internet, so this is the boundary:
+  // public traffic may only reach media files and the token-checked MCP.
+  const funnelOk = pathname.startsWith("/media/") || pathname === "/api/mcp";
+  if (request.headers.get("tailscale-funnel-request") && !funnelOk) {
     return new NextResponse("Not found", { status: 404 });
   }
 
