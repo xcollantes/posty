@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "posty-cloud": {
+      "type": "http",
+      "url": "${POSTY_MCP_URL}"
+    }
+  }
+}
