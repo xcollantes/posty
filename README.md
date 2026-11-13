@@ -155,6 +155,10 @@ From a device **outside** your tailnet, this should get no answer:
 curl -I https://posty.<your-tailnet>.ts.net/
 ```
 
+If you turned on Funnel for
+[cloud sessions](#from-claude-code-cloud-sessions), `/` returns `404`
+instead and `/api/mcp` returns `401`.
+
 ## Use from Claude (MCP)
 
 Posty serves an [MCP](https://modelcontextprotocol.io) endpoint at
@@ -216,9 +220,49 @@ record, because only the browser can read those.
    "queue a Bluesky post saying …". Claude runs on your machine, so it
    reaches posty over the tailnet. The machine has to stay awake.
 
-Custom connectors in the Claude chat app and Claude Code cloud sessions
-connect from Anthropic's servers, which aren't on your tailnet, so they
-can't reach posty.
+### From Claude Code cloud sessions
+
+Cloud sessions and custom connectors in the Claude chat app connect from
+Anthropic's servers, which aren't on your tailnet. To let cloud sessions
+in, turn on [Tailscale Funnel](https://tailscale.com/kb/1223/funnel).
+Funnel opens the whole host to the internet, but Posty answers only
+`/api/mcp`, which needs the token, and `/media/*` there. Everything else
+returns `404`.
+
+1. Use a long random `MCP_TOKEN` (step 1 above). Anyone who has it can post
+   to every account.
+2. In the Tailscale admin console, under **Access controls**, allow Funnel
+   for the tag:
+
+   ```json
+   "nodeAttrs": [{ "target": ["tag:posty"], "attr": ["funnel"] }]
+   ```
+
+3. Add `TS_SERVE_CONFIG=/config/serve-funnel.json` to `.env`, then run
+   `docker compose up -d`.
+4. At [claude.ai/code](https://claude.ai/code), edit your cloud
+   environment:
+   - Add the environment variable
+     `POSTY_MCP_URL=https://posty.<your-tailnet>.ts.net/api/mcp`. This
+     repo's `.mcp.json` reads it.
+   - Under **Network secrets**, add a secret for
+     `posty.<your-tailnet>.ts.net` with header `Authorization`, prefix
+     `Bearer` and your `MCP_TOKEN` as the value. Anthropic's proxy adds
+     the header, so the token never enters the session.
+5. Start a cloud session on this repo and run `/mcp`. `posty-cloud` should
+   be connected.
+
+On your own machine, decline the prompt to approve `posty-cloud`. The
+`posty` server from step 2 keeps working.
+
+With Funnel on:
+
+- `get_media_upload_url` doesn't work from the cloud, because the upload
+  route stays hidden. Use `upload_media_from_url` with a public URL.
+- Uploaded files at `/media/<random id>` are public to anyone who has the
+  link.
+- The app's JavaScript and CSS under `/_next/static/` are public too. They
+  hold no secrets.
 
 ## Operations
 
