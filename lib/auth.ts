@@ -24,6 +24,12 @@ export async function createSession(userId: string) {
   });
 }
 
+/** Sign the user out on every device, then start a fresh session here. */
+export async function restartSessions(userId: string) {
+  await db.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+  await createSession(userId);
+}
+
 export async function destroySession() {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;

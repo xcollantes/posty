@@ -13,7 +13,7 @@ import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createSession, destroySession, requireUser } from "@/lib/auth";
+import { createSession, destroySession, requireUser, restartSessions } from "@/lib/auth";
 import { sign, unsign } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
 import { appUrl } from "@/lib/env";
@@ -156,7 +156,9 @@ export async function passkeyRegister(response: RegistrationResponseJSON, token?
     return { error: "That passkey is already registered." };
   }
   if (token) {
-    await createSession(saved.userId);
+    // Links serve recovery and resets, so sign the account out everywhere
+    // else. A link issued by someone else can't take over an account quietly.
+    await restartSessions(saved.userId);
     redirect("/calendar");
   }
   revalidatePath("/settings");
@@ -169,7 +171,12 @@ export async function deletePasskey(passkeyId: string) {
   const [{ n }] = await db.select({ n: count() }).from(schema.passkeys).where(mine);
   // Removing the last one would lock the user out.
   if (n <= 1) return;
-  await db.delete(schema.passkeys).where(and(mine, eq(schema.passkeys.passkeyId, passkeyId)));
+  const removed = await db
+    .delete(schema.passkeys)
+    .where(and(mine, eq(schema.passkeys.passkeyId, passkeyId)))
+    .returning({ passkeyId: schema.passkeys.passkeyId });
+  // Usually a lost device: end the session it may still hold.
+  if (removed.length) await restartSessions(user.userId);
   revalidatePath("/settings");
 }
 
