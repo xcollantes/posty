@@ -120,8 +120,10 @@ works once and expires after 7 days. Add a passkey for each of your other
 devices in **Settings → Passkeys**.
 
 To add someone, enter their email in **Settings → Add a user** and send them
-the link it shows. **New sign-in link** next to a user gets them back in
-after they lose a device.
+the link it shows. Until they create a passkey, **New sign-in link** next to
+their name replaces a lost or expired link. Once someone has a passkey, only
+the `signin-link` command on the server can make them a link, so no Posty
+user can add a passkey to another's account.
 
 ### 4. Set up media hosting (Instagram, Threads, Facebook video)
 

@@ -295,9 +295,15 @@ export async function createUser(_prev: FormState, form: FormData): Promise<Form
   return newSignInLink(userId);
 }
 
-/** A one-time link that lets a user add a passkey on a new device. */
+/**
+ * A one-time link for a user who has no passkey yet. Users with one can't get
+ * links here, or any user could add a passkey to anyone's account; getting
+ * them back in after losing every device takes server access (signin-link).
+ */
 export async function newSignInLink(userId: string): Promise<FormState> {
   await requireUser();
+  const [{ n }] = await db.select({ n: count() }).from(schema.passkeys).where(eq(schema.passkeys.userId, userId));
+  if (n > 0) return { error: "They already have a passkey. To reset it, run the signin-link script on the server." };
   const url = await issueSignInLink(userId);
   return { ok: `Send them this link (one use, valid ${SIGN_IN_LINK_DAYS} days): ${url}` };
 }

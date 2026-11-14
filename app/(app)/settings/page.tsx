@@ -26,6 +26,9 @@ export default async function SettingsPage() {
     .from(schema.passkeys)
     .where(eq(schema.passkeys.userId, me.userId))
     .orderBy(asc(schema.passkeys.createdAt));
+  const enrolled = new Set(
+    (await db.selectDistinct({ userId: schema.passkeys.userId }).from(schema.passkeys)).map((r) => r.userId),
+  );
   const day = (d: Date) => d.toLocaleDateString("en-US", { dateStyle: "medium", timeZone: me.timezone });
   const zones = Intl.supportedValuesOf("timeZone");
   // Only what blocks deleting a workspace (see the foreign keys in lib/db/schema.ts).
@@ -142,8 +145,8 @@ export default async function SettingsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{u.name || u.email}</p>
                   {u.name && <p className="truncate text-sm text-muted">{u.email}</p>}
-                  {u.userId !== me.userId && (
-                    // For a new device, or after losing one.
+                  {!enrolled.has(u.userId) && (
+                    // Only until their first passkey; newSignInLink enforces it.
                     <ActionForm action={newSignInLink.bind(null, u.userId)} submitLabel="New sign-in link" className="mt-2" />
                   )}
                 </div>
