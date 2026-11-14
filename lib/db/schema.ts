@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -34,13 +35,34 @@ export const users = pgTable("users", {
   userId: uuid("user_id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
-  passwordHash: text("password_hash").notNull(),
   timezone: text("timezone").notNull().default("UTC"),
   createdAt: createdAt(),
 });
 
 export const sessions = pgTable("sessions", {
   sessionId: text("session_id").primaryKey(), // sha256 of the cookie token
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.userId, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+/** WebAuthn credentials. Passkeys are the only way to sign in. */
+export const passkeys = pgTable("passkeys", {
+  passkeyId: text("passkey_id").primaryKey(), // credential ID, base64url
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.userId, { onDelete: "cascade" }),
+  publicKey: text("public_key").notNull(), // COSE key, base64url
+  counter: bigint("counter", { mode: "number" }).notNull().default(0), // uint32
+  transports: jsonb("transports").$type<string[]>().notNull().default([]),
+  createdAt: createdAt(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+});
+
+/** One-time links that let a user without a passkey create one. */
+export const signInLinks = pgTable("sign_in_links", {
+  signInLinkId: text("sign_in_link_id").primaryKey(), // sha256 of the token
   userId: uuid("user_id")
     .notNull()
     .references(() => users.userId, { onDelete: "cascade" }),
