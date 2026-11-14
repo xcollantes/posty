@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
-import { asc, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { Trash2 } from "lucide-react";
-import { changePassword, createUser, deleteUser, updateProfile } from "@/app/actions/library";
+import {
+  createUser,
+  deletePasskey,
+  deleteUser,
+  newSignInLink,
+  updateProfile,
+} from "@/app/actions/library";
 import { createWorkspace, deleteWorkspace, renameWorkspace } from "@/app/actions/workspaces";
 import { ActionButton, ActionForm } from "@/components/ActionForm";
+import { AddPasskey } from "@/components/AddPasskey";
 import { Card, Page } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
 import { db, schema } from "@/lib/db";
@@ -14,6 +21,12 @@ export const metadata: Metadata = { title: "Settings" };
 export default async function SettingsPage() {
   const me = await requireUser();
   const users = await db.select().from(schema.users).orderBy(asc(schema.users.createdAt));
+  const passkeys = await db
+    .select()
+    .from(schema.passkeys)
+    .where(eq(schema.passkeys.userId, me.userId))
+    .orderBy(asc(schema.passkeys.createdAt));
+  const day = (d: Date) => d.toLocaleDateString("en-US", { dateStyle: "medium", timeZone: me.timezone });
   const zones = Intl.supportedValuesOf("timeZone");
   // Only what blocks deleting a workspace (see the foreign keys in lib/db/schema.ts).
   const [workspaces, itemCounts] = await Promise.all([
@@ -50,24 +63,29 @@ export default async function SettingsPage() {
           </ActionForm>
         </Card>
 
-        <Card title="Password">
-          <ActionForm action={changePassword} submitLabel="Change password" className="space-y-4">
-            <label className="block text-sm font-semibold">
-              Current password
-              <input name="current" type="password" autoComplete="current-password" className="input mt-1.5" required />
-            </label>
-            <label className="block text-sm font-semibold">
-              New password <span className="font-normal text-muted">(at least 10 characters)</span>
-              <input
-                name="next"
-                type="password"
-                autoComplete="new-password"
-                minLength={10}
-                className="input mt-1.5"
-                required
-              />
-            </label>
-          </ActionForm>
+        <Card title="Passkeys" hint="Add one on each device you sign in from." flush>
+          <ul className="divide-y divide-line">
+            {passkeys.map((p) => (
+              <li key={p.passkeyId} className="flex items-center gap-3 px-5 py-3">
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="font-semibold">Added {day(p.createdAt)}</p>
+                  <p className="text-muted">{p.lastUsedAt ? `Last used ${day(p.lastUsedAt)}` : "Not used to sign in yet"}</p>
+                </div>
+                {passkeys.length > 1 && (
+                  <ActionButton
+                    action={deletePasskey.bind(null, p.passkeyId)}
+                    label={<Trash2 className="size-4" />}
+                    title="Remove passkey"
+                    confirm="Remove this passkey? The device that holds it can no longer sign in."
+                    className="icon-btn icon-btn-danger"
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="px-5 py-4">
+            <AddPasskey />
+          </div>
         </Card>
 
         <Card
@@ -120,10 +138,14 @@ export default async function SettingsPage() {
         <Card title="Users" flush>
           <ul className="divide-y divide-line">
             {users.map((u) => (
-              <li key={u.userId} className="flex items-center gap-3 px-5 py-3">
+              <li key={u.userId} className="flex items-start gap-3 px-5 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{u.name || u.email}</p>
                   {u.name && <p className="truncate text-sm text-muted">{u.email}</p>}
+                  {u.userId !== me.userId && (
+                    // For a new device, or after losing one.
+                    <ActionForm action={newSignInLink.bind(null, u.userId)} submitLabel="New sign-in link" className="mt-2" />
+                  )}
                 </div>
                 {u.userId === me.userId ? (
                   <span className="chip bg-link/12 text-link">You</span>
@@ -141,7 +163,7 @@ export default async function SettingsPage() {
           </ul>
         </Card>
 
-        <Card title="Add a user">
+        <Card title="Add a user" hint="You get a one-time link to send them. They create a passkey with it.">
           <ActionForm action={createUser} submitLabel="Add user" className="space-y-4">
             <label className="block text-sm font-semibold">
               Name
@@ -150,17 +172,6 @@ export default async function SettingsPage() {
             <label className="block text-sm font-semibold">
               Email
               <input name="email" type="email" className="input mt-1.5" required />
-            </label>
-            <label className="block text-sm font-semibold">
-              Password <span className="font-normal text-muted">(at least 10 characters)</span>
-              <input
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                minLength={10}
-                className="input mt-1.5"
-                required
-              />
             </label>
           </ActionForm>
         </Card>

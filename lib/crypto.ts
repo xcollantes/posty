@@ -4,17 +4,9 @@ import {
   createHash,
   createHmac,
   randomBytes,
-  scrypt,
   timingSafeEqual,
 } from "node:crypto";
-import { promisify } from "node:util";
 import { env } from "@/lib/env";
-
-const scryptAsync = promisify(scrypt) as (
-  password: string,
-  salt: Buffer,
-  keylen: number,
-) => Promise<Buffer>;
 
 function appKey(): Buffer {
   // APP_KEY is any string; derive a stable 32-byte key from it.
@@ -34,20 +26,6 @@ export function decrypt(stored: string): string {
   const decipher = createDecipheriv("aes-256-gcm", appKey(), raw.subarray(0, 12));
   decipher.setAuthTag(raw.subarray(12, 28));
   return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString("utf8");
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16);
-  const key = await scryptAsync(password, salt, 64);
-  return `scrypt$${salt.toString("base64")}$${key.toString("base64")}`;
-}
-
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
-  const [scheme, salt, key] = stored.split("$");
-  if (scheme !== "scrypt" || !salt || !key) return false;
-  const expected = Buffer.from(key, "base64");
-  const actual = await scryptAsync(password, Buffer.from(salt, "base64"), expected.length);
-  return timingSafeEqual(actual, expected);
 }
 
 export const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
