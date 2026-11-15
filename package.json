@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build && npm run build:worker",
-    "build:worker": "esbuild worker.ts scripts/migrate.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outdir=dist --tsconfig=tsconfig.json --out-extension:.js=.mjs",
+    "build:worker": "esbuild worker.ts scripts/migrate.ts scripts/signin-link.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outdir=dist --tsconfig=tsconfig.json --out-extension:.js=.mjs",
     "start": "next start",
     "worker": "npm run build:worker && node --env-file-if-exists=.env dist/worker.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npm run build:worker && node --env-file-if-exists=.env dist/scripts/migrate.mjs",
+    "signin-link": "npm run build:worker && node --env-file-if-exists=.env dist/scripts/signin-link.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -23,6 +24,7 @@
     "@fullcalendar/timegrid": "^6.1.22",
     "@google-cloud/storage": "^8.4.0",
     "@modelcontextprotocol/server": "^2.4.0",
+    "@simplewebauthn/server": "^14.1.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.4",
     "emoji-picker-element": "^1.29.1",

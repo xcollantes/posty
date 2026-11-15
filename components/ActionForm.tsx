@@ -12,7 +12,7 @@ export function ActionForm({
   submitLabel = "Save",
 }: {
   action: (prev: State, form: FormData) => Promise<State>;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
   submitLabel?: string;
 }) {
@@ -20,12 +20,13 @@ export function ActionForm({
   return (
     <form action={formAction} className={className ?? "space-y-3"}>
       {children}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button className="btn-primary" disabled={pending}>
           {pending ? "Saving…" : submitLabel}
         </button>
         {state?.error && <span role="alert" className="text-sm text-danger">{state.error}</span>}
-        {state?.ok && <span className="text-sm text-ok">{state.ok}</span>}
+        {/* break-all: the ok message can carry a long sign-in link. */}
+        {state?.ok && <span className="text-sm break-all text-ok">{state.ok}</span>}
       </div>
     </form>
   );

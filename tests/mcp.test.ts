@@ -104,7 +104,7 @@ describe.runIf(reachable)("MCP tools", () => {
     [{ workspaceId }] = await db.select().from(schema.workspaces).limit(1);
     await db
       .insert(schema.users)
-      .values({ email: "mcp-test@example.test", name: "MCP Test", passwordHash: "x", timezone: "America/Los_Angeles" })
+      .values({ email: "mcp-test@example.test", name: "MCP Test", timezone: "America/Los_Angeles" })
       .onConflictDoNothing();
     const [user] = await db.select().from(schema.users).where(eq(schema.users.email, "mcp-test@example.test"));
     userId = user.userId;

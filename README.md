@@ -60,11 +60,11 @@ You need a machine with Docker and a free [Tailscale](https://tailscale.com)
 account.
 
 > **Just trying it out?** Skip Tailscale. Run `cp .env.example .env`, set
-> `APP_URL=http://localhost:3000`, `APP_KEY`, `ADMIN_EMAIL` and
-> `ADMIN_PASSWORD`, then run
-> `docker compose -f compose.local.yml up -d --build` and open
-> <http://localhost:3000>. Instagram, Threads and Facebook video won't work
-> there.
+> `APP_URL=http://localhost:3000`, `APP_KEY` and `ADMIN_EMAIL`, then run
+> `docker compose -f compose.local.yml up -d --build` and
+> `docker compose -f compose.local.yml exec app node dist/scripts/signin-link.mjs you@example.com`,
+> and open the link it prints to create your passkey. Instagram, Threads and
+> Facebook video won't work there.
 
 ### 1. Prepare Tailscale
 
@@ -94,8 +94,7 @@ Fill in these values in `.env`:
 |---------------------|---------------------------------------|
 | `APP_URL`           | `https://posty.<your-tailnet>.ts.net` |
 | `APP_KEY`           | the random string from above          |
-| `ADMIN_EMAIL`       | your email, used to sign in           |
-| `ADMIN_PASSWORD`    | a strong password                     |
+| `ADMIN_EMAIL`       | your email                            |
 | `POSTGRES_PASSWORD` | any random string                     |
 | `TS_AUTHKEY`        | the key from step 1                   |
 
@@ -108,8 +107,23 @@ Your tailnet name is on the DNS page of the admin console, for example
 docker compose up -d --build
 ```
 
-Open `APP_URL` from any device on your tailnet and sign in with
-`ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+Posty signs in with passkeys, not passwords. Get a one-time link to create
+your first one:
+
+```bash
+docker compose exec app node dist/scripts/signin-link.mjs you@example.com
+```
+
+Open the link on a device on your tailnet and create the passkey (Touch ID,
+Face ID, Windows Hello, a password manager or a security key). The link
+works once and expires after 7 days. Add a passkey for each of your other
+devices in **Settings → Passkeys**.
+
+To add someone, enter their email in **Settings → Add a user** and send them
+the link it shows. Until they create a passkey, **New sign-in link** next to
+their name replaces a lost or expired link. Once someone has a passkey, only
+the `signin-link` command on the server can make them a link, so no Posty
+user can add a passkey to another's account.
 
 ### 4. Set up media hosting (Instagram, Threads, Facebook video)
 
@@ -167,17 +181,17 @@ what the UI does. Posts are made as the `ADMIN_EMAIL` user. Tools that list
 or create things take a `workspaceId` from `list_workspaces`, so Claude can't
 post to the wrong company by default.
 
-| Area     | Tools                                                                 |
-|----------|-----------------------------------------------------------------------|
-| Workspaces | `list_workspaces`                                                   |
-| Accounts | `list_accounts` (limits, options, queue, tags and the current time)   |
-| Posts    | `list_posts`, `get_post`, `create_post`, `edit_post`                  |
-| Going out | `publish_post`, `retry_post`, `delete_post`                          |
-| Media    | `list_media`, `upload_media_from_url`, `get_media_upload_url`, `update_media`, `delete_media` |
-| Metrics  | `get_post_metrics`                                                    |
-| Snippets | `list_snippets`, `create_snippet`, `update_snippet`, `delete_snippet` |
-| Queue    | `add_queue_slots`, `delete_queue_slot`                                |
-| Ideas    | `list_ideas`, `create_idea`, `update_idea`, `delete_idea`, `list_idea_groups`, `create_idea_group`, `delete_idea_group` |
+| Area       | Tools                                                                                                                   |
+|------------|-------------------------------------------------------------------------------------------------------------------------|
+| Workspaces | `list_workspaces`                                                                                                       |
+| Accounts   | `list_accounts` (limits, options, queue, tags and the current time)                                                     |
+| Posts      | `list_posts`, `get_post`, `create_post`, `edit_post`                                                                    |
+| Going out  | `publish_post`, `retry_post`, `delete_post`                                                                             |
+| Media      | `list_media`, `upload_media_from_url`, `get_media_upload_url`, `update_media`, `delete_media`                           |
+| Metrics    | `get_post_metrics`                                                                                                      |
+| Snippets   | `list_snippets`, `create_snippet`, `update_snippet`, `delete_snippet`                                                   |
+| Queue      | `add_queue_slots`, `delete_queue_slot`                                                                                  |
+| Ideas      | `list_ideas`, `create_idea`, `update_idea`, `delete_idea`, `list_idea_groups`, `create_idea_group`, `delete_idea_group` |
 
 `publish_post`, `retry_post` and the delete tools are marked destructive, and
 are separate from `create_post`, so you can auto-allow drafting and still be
@@ -278,6 +292,12 @@ With Funnel on:
   Discord-compatible webhook.
 - **LinkedIn** tokens can't be renewed by personal apps. A banner asks you to
   reconnect every 60 days.
+- **Locked out** (lost every device with a passkey):
+  `docker compose exec app node dist/scripts/signin-link.mjs you@example.com`
+  prints a fresh sign-in link.
+- **Passkeys are tied to `APP_URL`'s hostname.** Changing it (say, renaming
+  the tailnet) stops every passkey working; get back in with the
+  `signin-link` command above.
 
 ## Known limits
 
@@ -305,6 +325,7 @@ cp .env.example .env                         # set APP_URL=http://localhost:3000
                                              # DATABASE_URL, MEDIA_DIR=./data/media
 npm install
 npm run db:migrate                           # migrations + first admin
+npm run signin-link you@example.com          # link to create your passkey
 npm run dev                                  # UI on :3000
 npm run worker                               # publisher (separate terminal)
 npm test                                     # unit + DB integration tests

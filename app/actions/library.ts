@@ -1,57 +1,183 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import {
+  type AuthenticationResponseJSON,
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  type RegistrationResponseJSON,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+} from "@simplewebauthn/server";
+import { COSEALG, isoBase64URL, isoUint8Array } from "@simplewebauthn/server/helpers";
+import { and, count, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createSession, destroySession, requireUser } from "@/lib/auth";
-import { clearLoginFailures, loginBlockedFor, recordLoginFailure } from "@/lib/throttle";
-import { hashPassword, verifyPassword } from "@/lib/crypto";
+import { createSession, destroySession, requireUser, restartSessions } from "@/lib/auth";
+import { sign, unsign } from "@/lib/crypto";
 import { db, schema } from "@/lib/db";
 import { appUrl } from "@/lib/env";
 import { deleteMediaIfUnused, MAX_ALT_TEXT } from "@/lib/media";
+import { consumeSignInLink, findSignInLink, issueSignInLink, rp, SIGN_IN_LINK_DAYS } from "@/lib/passkeys";
 import { requireWorkspace } from "@/lib/workspaces";
-import { headers } from "next/headers";
 
 type FormState = { error?: string; ok?: string } | undefined;
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
-// ---- Session ----
+// ---- Session (passkeys) ----
 
-export async function login(_prev: FormState, form: FormData): Promise<FormState> {
-  const h = await headers();
-  const email = str(form, "email").toLowerCase();
-  // Throttle per account as well as per client: the client key comes from
-  // headers, which only `tailscale serve` can set reliably.
-  if (email.length > 320) return { error: "Wrong email or password" };
-  // Limits are checked before any password is tested (fail closed), and every
-  // attempted email is tracked alike so responses don't reveal which accounts
-  // exist. The client identity is only Tailscale-User-Login, which `tailscale
-  // serve` sets and strips from client input; anything without it (tagged
-  // devices, other proxies) shares one "unknown" bucket rather than trusting a
-  // spoofable header. Limits, as [key, free attempts]:
-  // - verified identity: email + identity (5) and identity (5). Identities
-  //   can't be forged, so no account-wide key is needed and guessing from one
-  //   device never locks out the owner's others.
-  // - no identity: email + "unknown" (20), plus a total "unknown" key (50) so
-  //   unidentified traffic can't mint unlimited keys and fill the throttle
-  //   table. Both only slow other unidentified clients, never verified ones.
-  // Every source is therefore capped before it can create many keys.
-  const identity = h.get("tailscale-user-login")?.slice(0, 200);
-  const limits: [string, number][] = identity
-    ? [[`email:${email}|${identity}`, 5], [`client:${identity}`, 5]]
-    : [[`email:${email}|unknown`, 20], ["client:unknown", 50]];
-  const wait = Math.max(...limits.map(([key]) => loginBlockedFor(key)));
-  if (wait) return { error: `Too many attempts. Try again in ${wait}s.` };
+// The challenge lives in a short-lived signed cookie between the options
+// call and the verify call. Registration also binds it to one user.
+const CHALLENGE_COOKIE = "posty_webauthn";
+type Challenge = { challenge: string; userId?: string };
 
-  const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email));
-  if (!user || !(await verifyPassword(str(form, "password"), user.passwordHash))) {
-    for (const [key, free] of limits) recordLoginFailure(key, free);
-    return { error: "Wrong email or password" };
+async function saveChallenge(c: Challenge) {
+  (await cookies()).set(CHALLENGE_COOKIE, sign(c, 300), {
+    httpOnly: true,
+    secure: appUrl().startsWith("https://"),
+    sameSite: "lax",
+    path: "/",
+    maxAge: 300,
+  });
+}
+
+async function takeChallenge(): Promise<Challenge | null> {
+  const jar = await cookies();
+  const saved = unsign<Challenge>(jar.get(CHALLENGE_COOKIE)?.value);
+  jar.delete(CHALLENGE_COOKIE);
+  return saved;
+}
+
+const LINK_GONE = "This link expired or was already used. Ask another Posty user for a new one.";
+
+// Reason: the library also offers ML-DSA-44 when Node has it, but that is
+// experimental Web Crypto in Node 24; a Node upgrade could orphan such keys.
+const ALGORITHMS = [COSEALG.EdDSA, COSEALG.ES256, COSEALG.RS256];
+
+export async function passkeyLoginOptions() {
+  // No allowCredentials: the browser offers any Posty passkey on the device.
+  const options = await generateAuthenticationOptions({ rpID: rp().rpID, userVerification: "required" });
+  await saveChallenge({ challenge: options.challenge });
+  return options;
+}
+
+export async function passkeyLogin(response: AuthenticationResponseJSON, next: string): Promise<FormState> {
+  const fail = { error: "That passkey isn't registered with Posty." };
+  const saved = await takeChallenge();
+  if (!saved || typeof response?.id !== "string") return { error: "Sign-in timed out. Try again." };
+  const [key] = await db.select().from(schema.passkeys).where(eq(schema.passkeys.passkeyId, response.id));
+  if (!key) return fail;
+  const { rpID, origin } = rp();
+  try {
+    const { verified, authenticationInfo } = await verifyAuthenticationResponse({
+      response,
+      expectedChallenge: saved.challenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+      credential: {
+        id: key.passkeyId,
+        publicKey: isoBase64URL.toBuffer(key.publicKey),
+        counter: key.counter,
+        transports: key.transports,
+      },
+      requireUserVerification: true,
+    });
+    if (!verified) return fail;
+    await db
+      .update(schema.passkeys)
+      .set({ counter: authenticationInfo.newCounter, lastUsedAt: new Date() })
+      .where(eq(schema.passkeys.passkeyId, key.passkeyId));
+  } catch {
+    // Reason: `response` comes straight from the client; malformed fields throw.
+    return fail;
   }
-  // The shared "unknown" total only decays with time; a success must not reset it.
-  for (const [key] of limits) if (key !== "client:unknown") clearLoginFailures(key);
-  await createSession(user.userId);
-  redirect(safeNext(str(form, "next")));
+  await createSession(key.userId);
+  redirect(safeNext(next));
+}
+
+/** Options for adding a passkey: to the signed-in user, or via a sign-in link. */
+export async function passkeyRegisterOptions(token?: string) {
+  const user = token ? await findSignInLink(token) : await requireUser();
+  if (!user) return { error: LINK_GONE };
+  const existing = await db
+    .select({ id: schema.passkeys.passkeyId, transports: schema.passkeys.transports })
+    .from(schema.passkeys)
+    .where(eq(schema.passkeys.userId, user.userId));
+  const { rpID, rpName } = rp();
+  const options = await generateRegistrationOptions({
+    rpName,
+    rpID,
+    userName: user.email,
+    userDisplayName: user.name,
+    userID: isoUint8Array.fromUTF8String(user.userId),
+    attestationType: "none",
+    excludeCredentials: existing,
+    authenticatorSelection: { residentKey: "required", userVerification: "required" },
+    supportedAlgorithmIDs: ALGORITHMS,
+  });
+  await saveChallenge({ challenge: options.challenge, userId: user.userId });
+  return { options };
+}
+
+export async function passkeyRegister(response: RegistrationResponseJSON, token?: string): Promise<FormState> {
+  const fail = { error: "Couldn't save that passkey. Try again." };
+  const saved = await takeChallenge();
+  if (!saved?.userId) return { error: "Timed out. Try again." };
+  // Without a link, only the signed-in user may add to their own account.
+  if (!token && (await requireUser()).userId !== saved.userId) return fail;
+  const { rpID, origin } = rp();
+  let credential;
+  try {
+    const { verified, registrationInfo } = await verifyRegistrationResponse({
+      response,
+      expectedChallenge: saved.challenge,
+      expectedOrigin: origin,
+      expectedRPID: rpID,
+      requireUserVerification: true,
+      supportedAlgorithmIDs: ALGORITHMS,
+    });
+    if (!verified) return fail;
+    credential = registrationInfo.credential;
+  } catch {
+    return fail;
+  }
+  // Single use, and it must still belong to the user the options were for.
+  if (token && (await consumeSignInLink(token)) !== saved.userId) return { error: LINK_GONE };
+  try {
+    // Plain insert, never upsert: a forged response can claim any credential ID.
+    await db.insert(schema.passkeys).values({
+      passkeyId: credential.id,
+      userId: saved.userId,
+      publicKey: isoBase64URL.fromBuffer(credential.publicKey),
+      counter: credential.counter,
+      transports: credential.transports ?? [],
+    });
+  } catch {
+    return { error: "That passkey is already registered." };
+  }
+  if (token) {
+    // Links serve recovery and resets, so sign the account out everywhere
+    // else. A link issued by someone else can't take over an account quietly.
+    await restartSessions(saved.userId);
+    redirect("/calendar");
+  }
+  revalidatePath("/settings");
+  return { ok: "Passkey added" };
+}
+
+export async function deletePasskey(passkeyId: string) {
+  const user = await requireUser();
+  const mine = eq(schema.passkeys.userId, user.userId);
+  const [{ n }] = await db.select({ n: count() }).from(schema.passkeys).where(mine);
+  // Removing the last one would lock the user out.
+  if (n <= 1) return;
+  const removed = await db
+    .delete(schema.passkeys)
+    .where(and(mine, eq(schema.passkeys.passkeyId, passkeyId)))
+    .returning({ passkeyId: schema.passkeys.passkeyId });
+  // Usually a lost device: end the session it may still hold.
+  if (removed.length) await restartSessions(user.userId);
+  revalidatePath("/settings");
 }
 
 /** Only same-origin paths; rejects //host, /\host and control characters. */
@@ -152,36 +278,34 @@ export async function updateProfile(_prev: FormState, form: FormData): Promise<F
   return { ok: "Saved" };
 }
 
-export async function changePassword(_prev: FormState, form: FormData): Promise<FormState> {
-  const user = await requireUser();
-  const [row] = await db.select().from(schema.users).where(eq(schema.users.userId, user.userId));
-  if (!(await verifyPassword(str(form, "current"), row.passwordHash))) return { error: "Current password is wrong" };
-  const next = str(form, "next");
-  if (next.length < 10) return { error: "Use at least 10 characters" };
-  await db.update(schema.users).set({ passwordHash: await hashPassword(next) }).where(eq(schema.users.userId, user.userId));
-  // Sign out every other session.
-  await db.delete(schema.sessions).where(eq(schema.sessions.userId, user.userId));
-  await createSession(user.userId);
-  return { ok: "Password changed" };
-}
-
 export async function createUser(_prev: FormState, form: FormData): Promise<FormState> {
   await requireUser();
   const email = str(form, "email").toLowerCase();
-  const password = str(form, "password");
   if (!/^[^@\s]+@[^@\s]+$/.test(email)) return { error: "Enter a valid email" };
-  if (password.length < 10) return { error: "Use at least 10 characters" };
+  let userId: string;
   try {
-    await db.insert(schema.users).values({
-      email,
-      name: str(form, "name") || email.split("@")[0],
-      passwordHash: await hashPassword(password),
-    });
+    [{ userId }] = await db
+      .insert(schema.users)
+      .values({ email, name: str(form, "name") || email.split("@")[0] })
+      .returning({ userId: schema.users.userId });
   } catch {
     return { error: "That email is already in use" };
   }
   revalidatePath("/settings");
-  return { ok: "User added" };
+  return newSignInLink(userId);
+}
+
+/**
+ * A one-time link for a user who has no passkey yet. Users with one can't get
+ * links here, or any user could add a passkey to anyone's account; getting
+ * them back in after losing every device takes server access (signin-link).
+ */
+export async function newSignInLink(userId: string): Promise<FormState> {
+  await requireUser();
+  const [{ n }] = await db.select({ n: count() }).from(schema.passkeys).where(eq(schema.passkeys.userId, userId));
+  if (n > 0) return { error: "They already have a passkey. To reset it, run the signin-link script on the server." };
+  const url = await issueSignInLink(userId);
+  return { ok: `Send them this link (one use, valid ${SIGN_IN_LINK_DAYS} days): ${url}` };
 }
 
 export async function deleteUser(userId: string) {

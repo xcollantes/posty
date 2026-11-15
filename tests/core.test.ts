@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { bearerOk, decrypt, encrypt, hashPassword, sign, unsign, verifyPassword } from "@/lib/crypto";
+import { bearerOk, decrypt, encrypt, sign, unsign } from "@/lib/crypto";
 import { MEDIA_NAME_RE, parseRange } from "@/lib/media";
 import { findFacets } from "@/lib/networks/bluesky";
 import { NETWORKS, optionErrors, validatePart } from "@/lib/networks/catalog";
@@ -73,11 +73,6 @@ describe("crypto", () => {
     expect(unsign<{ a: number }>(token)?.a).toBe(1);
     expect(unsign(token.slice(0, -2) + "xx")).toBeNull();
     expect(unsign(sign({ a: 1 }, -1))).toBeNull();
-  });
-  it("hashes passwords", async () => {
-    const hash = await hashPassword("correct horse");
-    expect(await verifyPassword("correct horse", hash)).toBe(true);
-    expect(await verifyPassword("wrong", hash)).toBe(false);
   });
   it("checks MCP bearer tokens and fails closed", () => {
     expect(bearerOk("Bearer s3cret", "s3cret")).toBe(true);
@@ -169,20 +164,5 @@ describe("validation", () => {
         aiGenerated: "false",
       }),
     ).toEqual([]);
-  });
-});
-
-describe("login throttle", () => {
-  it("blocks after the free attempts and never evicts live lockouts", async () => {
-    const { clearLoginFailures, loginBlockedFor, recordLoginFailure } = await import("@/lib/throttle");
-    for (let i = 0; i < 6; i++) recordLoginFailure("victim", 5);
-    expect(loginBlockedFor("victim")).toBeGreaterThan(0);
-    // Flood with fresh keys: the table fills, but the live lockout stays.
-    for (let i = 0; i < 10_050; i++) recordLoginFailure(`flood-${i}`, 5);
-    expect(loginBlockedFor("victim")).toBeGreaterThan(0);
-    // Full of recent entries: unknown keys fail closed.
-    expect(loginBlockedFor("never-seen")).toBeGreaterThan(0);
-    clearLoginFailures("victim");
-    expect(loginBlockedFor("victim")).toBe(0);
   });
 });

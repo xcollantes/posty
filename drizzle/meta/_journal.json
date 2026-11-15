@@ -29,6 +29,13 @@
       "when": 1793953327133,
       "tag": "0003_workspaces",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794643689113,
+      "tag": "0004_passkeys",
+      "breakpoints": true
     }
   ]
 }

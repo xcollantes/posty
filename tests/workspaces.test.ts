@@ -63,7 +63,7 @@ describe.runIf(reachable)("workspaces", () => {
   beforeAll(async () => {
     const [row] = await db
       .insert(schema.users)
-      .values({ email: user.email, name: user.name, passwordHash: "x" })
+      .values({ email: user.email, name: user.name })
       .returning();
     user.userId = row.userId;
     a = await makeWorkspace(`ws-test-a-${crypto.randomUUID()}`);
